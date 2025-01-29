@@ -7,10 +7,16 @@ const jwt = require('jsonwebtoken');
 const session = require('express-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const multer = require('multer');
+const path = require("path");
 
 
 const app = express();
+
+//Middlerware
 app.use(bodyParser.json());
+app.use(express.static("uploads"));
+app.use(express.urlencoded({ extended: true }));
 
 
 
@@ -100,7 +106,7 @@ const client = new OAuth2Client("742020514079-4bt0iavoi21sdm0rkeubueu34iq1v1l0.a
 async function verifyToken(idToken) {
   const ticket = await client.verifyIdToken({
     idToken,
-    audience: "742020514079-4bt0iavoi21sdm0rkeubueu34iq1v1l0.apps.googleusercontent.com", // ตรวจสอบว่า token มาจาก client ของคุณ
+    audience: "742020514079-4bt0iavoi21sdm0rkeubueu34iq1v1l0.apps.googleusercontent.com",
   });
   const payload = ticket.getPayload();
   return payload;
@@ -221,6 +227,327 @@ app.get("/user/:student_id", (req, res) => {
       if (result.length === 0) return res.status(404).json({ error: "User not found" });
 
       res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+  });
+});
+
+// API ดึงข้อมูล Info
+app.get("/user_info/:student_id", (req, res) => {
+  const { student_id } = req.params;
+
+  const query = `
+    SELECT 
+      first_name, 
+      last_name, 
+      student_id, 
+      major, 
+      year, 
+      email, 
+      phone_number, 
+      digital_id, 
+      current_petition, 
+      lastest_coopapplication, 
+      lastest_studentcoopapplication, 
+      current_state
+    FROM studentsinfo
+    WHERE student_id = ?`;
+
+  db.query(query, [student_id], (err, result) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    if (result.length === 0) return res.status(404).json({ error: "User not found" });
+
+    res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+  });
+});
+
+//Post Info
+app.post("/studentsinfo", (req, res) => {
+  const { first_name, last_name, student_id, major, year, email, phone_number } = req.body;
+
+  const query = `
+    INSERT INTO studentsinfo (first_name, last_name, student_id, major, year, email, phone_number)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.query(
+    query,
+    [first_name, last_name, student_id, major, year, email, phone_number],
+    (err, result) => {
+      if (err) {
+        console.error(err);
+        res.status(500).send("Error saving data");
+      } else {
+        res.status(200).send("Data saved successfully");
+      }
+    }
+  );
+});
+
+
+
+// Update Current Petition
+app.post("/current_petition", (req, res) => {
+  console.log("Request Headers for /current_petition:", req.headers);
+  console.log("Request Body:", req.body);
+  const { StudentID, PetitionName } = req.body;
+
+  const query = `
+    UPDATE studentsinfo
+    SET current_petition = ?
+    WHERE student_id = ?
+  `;
+
+  db.query(query, [PetitionName, StudentID], (err, result) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send("Error updating data");
+    } else {
+      res.status(200).send("Data updated successfully");
+    }
+  });
+});
+
+
+const Totalcredits_storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, './uploads/TotalCredits/'); // โฟลเดอร์ที่เก็บไฟล์
+  },
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    cb(null, `${timestamp}-${file.originalname}`);
+  },
+});
+
+// ตั้งค่าการอัปโหลดไฟล์
+const RelatedFiles_storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "./uploads/RelatedFiles/"); // โฟลเดอร์เก็บไฟล์
+  },
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    cb(null, `${timestamp}-${file.originalname}`);
+  },
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true); // อนุญาตให้อัปโหลดไฟล์
+  } else {
+    cb(new Error('Only PDF files are allowed'), false); // ปฏิเสธไฟล์ที่ไม่ใช่ PDF
+  }
+};
+
+const Totalcredits_upload = multer({
+  storage:Totalcredits_storage,
+  fileFilter,
+});
+
+const RelatedFiles_upload = multer({
+  storage:RelatedFiles_storage,
+  fileFilter,
+});
+
+
+
+//Submit REQUEST-A
+app.post("/coopstudentapplication", Totalcredits_upload.single('TotalCredits_File'), (req, res) => {
+  console.log("File uploaded:", req.file);
+  console.log("Body data:", req.body);
+  const {
+    StudentID,
+    FullName,
+    Major,
+    Year,
+    Email,
+    PhoneNumber,
+    PetitionName,
+  } = req.body;
+
+  const totalCreditsFile = req.file ? req.file.path : null;
+  console.log("Uploaded file path:", totalCreditsFile);
+  
+
+  // ตรวจสอบจำนวน Petition ของ StudentID + Petition_name
+  const checkQuery = `
+    SELECT COUNT(*) AS petitionCount, MAX(Petition_version) AS maxVersion
+    FROM studentcoopapplication
+    WHERE StudentID = ? AND Petition_name = ?;
+  `;
+
+  db.query(checkQuery, [StudentID, PetitionName], (err, results) => {
+
+    if (err) {
+      console.error("Error checking petition count:", err);
+      return res.status(500).send("Failed to add petition");
+    }
+
+    const { petitionCount, maxVersion } = results[0];
+
+    // ตรวจสอบเงื่อนไข: แต่ละคำร้องของแต่ละ StudentID จะมีไม่เกิน 10 ฉบับ
+    if (petitionCount >= 10) {
+      return res
+        .status(400)
+        .send(
+          `Cannot add more than 10 versions of the petition '${Petition_name}' for this StudentID`
+        );
+    }
+
+    // เพิ่ม PetitionVersion ใหม่
+    const newVersion = maxVersion ? maxVersion + 1 : 1;
+    console.log(newVersion)
+
+    const query = `
+      INSERT INTO StudentCoopApplication 
+      (StudentID, FullName, Major, Year, Email, PhoneNumber, TotalCredits_File,Progress_State,Petition_name,Petition_version) 
+      VALUES (?, ?, ?, ?, ?, ?, ? ,?, ? , ?)`;
+
+  db.query(query,[StudentID, FullName, Major, Year, Email, PhoneNumber, totalCreditsFile,0,PetitionName,newVersion],
+    (err, result) => {
+      if (err) {
+        console.error('Error inserting data:', err);
+        res.status(500).send('Failed to submit');
+      } else {
+        res.status(200).send('Submit successfully');
+      }
+    }
+  );
+  });
+});
+
+// Submit Request-B
+app.post("/coopapplicationsubmit",RelatedFiles_upload.array("relatedFiles", 4),(req, res) => {
+  console.log("File uploaded:", req.files);
+  console.log("Body data:", req.body);
+  const {
+      StudentID,
+      FullName,
+      Major,
+      Year,
+      Email,
+      PhoneNumber,
+      CompanyNameTH,
+      CompanyNameEN,
+      CompanyAddress,
+      CompanyProvince,
+      CompanyPhoneNumber,
+      PetitionName,
+    } = req.body;
+
+    const files = req.files;
+
+    if (!StudentID || !FullName || !Major || !Year || !Email || !PhoneNumber) {
+      return res.status(400).json({ message: "กรุณากรอกข้อมูลนิสิตให้ครบถ้วน" });
+    }
+
+    if (files.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "กรุณาอัปโหลดเอกสารอย่างน้อย 1 ไฟล์" });
+    }
+
+    const filePaths = files.map((file) => file.filename).join(",");
+    // ตรวจสอบจำนวน Petition ของ StudentID + Petition_name
+    const checkQuery = `
+      SELECT COUNT(*) AS petitionCount, MAX(Petition_version) AS maxVersion
+      FROM coopapplication
+      WHERE StudentID = ? AND Petition_name = ?;
+    `;
+
+    db.query(checkQuery, [StudentID, PetitionName], (err, results) => {
+
+      if (err) {
+        console.error("Error checking petition count:", err);
+        return res.status(500).send("Failed to add petition");
+      }
+
+      const { petitionCount, maxVersion } = results[0];
+
+      // ตรวจสอบเงื่อนไข: แต่ละคำร้องของแต่ละ StudentID จะมีไม่เกิน 10 ฉบับ
+      if (petitionCount >= 10) {
+        return res
+          .status(400)
+          .send(
+            `Cannot add more than 10 versions of the petition '${Petition_name}' for this StudentID`
+          );
+      }
+
+      // เพิ่ม PetitionVersion ใหม่
+      const newVersion = maxVersion ? maxVersion + 1 : 1;
+      console.log(newVersion)
+
+      const query = `
+        INSERT INTO coopapplication (
+          StudentID, FullName, Major, Year, Email, PhoneNumber,
+          CompanyNameTH, CompanyNameEN, CompanyAddress, CompanyProvince, 
+          CompanyPhoneNumber, FilePath, Petition_name, Progress_State,Petition_version
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const values = [
+        StudentID,
+        FullName,
+        Major,
+        Year,
+        Email,
+        PhoneNumber,
+        CompanyNameTH,
+        CompanyNameEN,
+        CompanyAddress,
+        CompanyProvince,
+        CompanyPhoneNumber,
+        filePaths,
+        PetitionName || "คำร้องขอปฏิบัติงานสหกิจศึกษา",
+        0, // rPogress_State เริ่มต้นเป็น 0
+        newVersion,
+      ];
+
+      // บันทึกข้อมูลลงใน MySQL
+      db.query(query, values, (err, result) => {
+        if (err) {
+          console.error("Error inserting data:", err);
+          return res
+            .status(500)
+            .json({ message: "เกิดข้อผิดพลาดในการบันทึกข้อมูล" });
+        }
+        res.status(200).json({ message: "บันทึกข้อมูลสำเร็จ" });
+      });
+  });
+});
+
+//ดึงคำร้องทั้งหมด
+app.get("/allpetitions", (req, res) => {
+  const query = `
+  SELECT 
+      StudentID, 
+      FullName, 
+      Major, 
+      Year, 
+      Petition_name,
+      Petition_version
+  FROM 
+      studentcoopapplication
+
+  UNION ALL
+
+  SELECT 
+      StudentID, 
+      FullName, 
+      Major, 
+      Year, 
+      Petition_name,
+      Petition_version
+  FROM 
+      coopapplication 
+  ORDER BY StudentID;
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.status(200).json(results);
+    }
   });
 });
 

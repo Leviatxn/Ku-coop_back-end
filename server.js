@@ -18,6 +18,7 @@ app.use(bodyParser.json());
 app.use(express.static("uploads"));
 app.use(express.urlencoded({ extended: true }));
 
+app.use("/uploads", express.static(path.join(__dirname)));
 
 
 // Enable CORS
@@ -283,6 +284,61 @@ app.post("/studentsinfo", (req, res) => {
 });
 
 
+// API สำหรับอัปเดตค่า Is_approve และ Progress_State
+app.put("/updateStudentApplication", (req, res) => {
+  const { ApplicationID, Is_approve, Progress_State } = req.body;
+
+  // ตรวจสอบข้อมูลที่รับเข้ามา
+  if (!ApplicationID || Is_approve === undefined || Progress_State === undefined) {
+    return res.status(400).json({ error: "Invalid input data." });
+  }
+
+  // คำสั่ง SQL สำหรับอัปเดตข้อมูล
+  const sql = `
+    UPDATE studentcoopapplication 
+    SET Is_approve = ?, Progress_State = ? 
+    WHERE ApplicationID = ?
+  `;
+
+  // ดำเนินการอัปเดตข้อมูลในฐานข้อมูล
+  db.query(sql, [Is_approve, Progress_State, ApplicationID], (err, result) => {
+    if (err) {
+      console.error("Error updating data:", err);
+      res.status(500).json({ error: "Failed to update data." });
+    } else {
+      res.json({ message: "Data updated successfully.", result });
+    }
+  });
+});
+
+// API สำหรับอัปเดตค่า Is_approve และ Progress_State
+app.put("/updateCoopApplication", (req, res) => {
+  const { ApplicationID, Is_approve, Progress_State } = req.body;
+
+  // ตรวจสอบข้อมูลที่รับเข้ามา
+  if (!ApplicationID || Is_approve === undefined || Progress_State === undefined) {
+    return res.status(400).json({ error: "Invalid input data." });
+  }
+
+  // คำสั่ง SQL สำหรับอัปเดตข้อมูล
+  const sql = `
+    UPDATE coopapplication 
+    SET Is_approve = ?, Progress_State = ? 
+    WHERE ApplicationID = ?
+  `;
+
+  // ดำเนินการอัปเดตข้อมูลในฐานข้อมูล
+  db.query(sql, [Is_approve, Progress_State, ApplicationID], (err, result) => {
+    if (err) {
+      console.error("Error updating data:", err);
+      res.status(500).json({ error: "Failed to update data." });
+    } else {
+      res.json({ message: "Data updated successfully.", result });
+    }
+  });
+});
+
+
 
 // Update Current Petition
 app.post("/current_petition", (req, res) => {
@@ -306,6 +362,27 @@ app.post("/current_petition", (req, res) => {
   });
 });
 
+// Update Current Petition Status
+app.post("/current_petition", (req, res) => {
+  console.log("Request Headers for /current_petition:", req.headers);
+  console.log("Request Body:", req.body);
+  const { StudentID, PetitionName } = req.body;
+
+  const query = `
+    UPDATE studentsinfo
+    SET current_petition = ?
+    WHERE student_id = ?
+  `;
+
+  db.query(query, [PetitionName, StudentID], (err, result) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send("Error updating data");
+    } else {
+      res.status(200).send("Data updated successfully");
+    }
+  });
+});
 
 const Totalcredits_storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -514,31 +591,146 @@ app.post("/coopapplicationsubmit",RelatedFiles_upload.array("relatedFiles", 4),(
   });
 });
 
-//ดึงคำร้องทั้งหมด
-app.get("/allpetitions", (req, res) => {
+//ดึงคำร้องฌฉพาะ
+app.get("/petitions/:student_id", (req, res) => {
+  const {student_id} = req.params;
   const query = `
   SELECT 
+      ApplicationID,
       StudentID, 
       FullName, 
       Major, 
       Year, 
       Petition_name,
-      Petition_version
+      Petition_version,
+      Progress_State,
+      SubmissionDate
+  FROM 
+      studentcoopapplication
+  WHERE StudentID = ?
+
+  UNION ALL
+
+  SELECT
+      ApplicationID,
+      StudentID, 
+      FullName, 
+      Major, 
+      Year, 
+      Petition_name,
+      Petition_version,
+      Progress_State,
+      SubmissionDate
+  FROM 
+      coopapplication 
+  WHERE StudentID = ?
+  
+  ORDER BY Petition_version DESC;
+;
+  `;
+
+  db.query(query,[student_id,student_id],(err, results) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.status(200).json(results);
+    }
+  });
+});
+
+//ดึงข้อมูลเฉพาะล่าสุด
+app.get("/lastpetition/:student_id", (req, res) => {
+  const { student_id } = req.params;
+
+  const query = `
+    SELECT 
+        ApplicationID,
+        StudentID, 
+        FullName, 
+        Major, 
+        Year, 
+        Petition_name,
+        Petition_version,
+        Progress_State,
+        SubmissionDate
+    FROM (
+        SELECT 
+            ApplicationID,
+            StudentID, 
+            FullName, 
+            Major, 
+            Year, 
+            Petition_name,
+            Petition_version,
+            Progress_State,
+            SubmissionDate
+        FROM studentcoopapplication
+        WHERE StudentID = ?
+
+        UNION ALL
+
+        SELECT
+            ApplicationID,
+            StudentID, 
+            FullName, 
+            Major, 
+            Year, 
+            Petition_name,
+            Petition_version,
+            Progress_State,
+            SubmissionDate
+        FROM coopapplication
+        WHERE StudentID = ?
+    ) AS combined_data
+    ORDER BY SubmissionDate DESC
+    LIMIT 1;
+  `;
+
+  db.query(query, [student_id, student_id], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: "Database error" });
+    }
+    if (result.length === 0) {
+      return res.status(404).json({ error: "No data found" });
+    }
+    res.json(result[0]);
+  });
+});
+
+
+
+//ดึงคำร้องทั้งหมด
+app.get("/allpetitions", (req, res) => {
+  const query = `
+  SELECT 
+      ApplicationID,
+      StudentID, 
+      FullName, 
+      Major, 
+      Year, 
+      Petition_name,
+      Petition_version,
+      Progress_State,
+      SubmissionDate
   FROM 
       studentcoopapplication
 
   UNION ALL
 
-  SELECT 
+  SELECT
+      ApplicationID,
       StudentID, 
       FullName, 
       Major, 
       Year, 
       Petition_name,
-      Petition_version
+      Petition_version,
+      Progress_State,
+      SubmissionDate
   FROM 
       coopapplication 
-  ORDER BY StudentID;
+  ORDER BY SubmissionDate DESC
   `;
 
   db.query(query, (err, results) => {
@@ -551,6 +743,42 @@ app.get("/allpetitions", (req, res) => {
   });
 });
 
+//ดึงคำร้องขอเป็นนิสิต sort by application_id
+app.get("/studentcoopapplication/:ApplicationID", (req, res) => {
+  const {ApplicationID} = req.params;
+
+  const query = `
+    SELECT * FROM studentcoopapplication WHERE ApplicationID = ?
+  `;
+
+  db.query(query,[ApplicationID],(err, result) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+    }
+  });
+});
+
+//ดึงคำร้องขอตทำงาน sort by application_id
+app.get("/coopapplication/:ApplicationID", (req, res) => {
+  const {ApplicationID} = req.params;
+
+  const query = `
+    SELECT * FROM coopapplication WHERE ApplicationID = ?
+  `;
+
+  db.query(query,[ApplicationID],(err, result) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+
+    }
+  });
+});
 
 // Start Server
 app.listen(5000, () => {

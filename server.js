@@ -57,6 +57,8 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 
+
+
 // Passport Google Strategy
 passport.use(new GoogleStrategy({
   clientID: '742020514079-4bt0iavoi21sdm0rkeubueu34iq1v1l0.apps.googleusercontent.com',
@@ -126,12 +128,50 @@ app.get('/auth/google/callback',
     console.log('User after Google login:', req.user);
     console.log('User email:', req.user.email);
     const isFirstLogin = req.user.isFirstLogin;
-    const redirectUrl = isFirstLogin
-      ? 'http://localhost:3000/register'
-      : 'http://localhost:3000/home';
-    res.redirect(redirectUrl);
+    const email = req.user.email;
+    try{
+      if(isFirstLogin){
+        res.redirect('http://localhost:3000/register');
+      }
+      else{
+        const query = "SELECT * FROM users WHERE email = ?";
+        db.query(query, [email], (err, result) => {
+          if (err) {
+            console.error("Database error:", err);
+            return res.status(500).json({ error: "Database error" });
+          }
+    
+          if (result.length === 0) {
+            return res.status(404).json({ error: "User not found. Please register first." });
+          }
+    
+          const user = result[0];
+          const token = jwt.sign({ studentId: user.student_id }, "secret_key", { expiresIn: "1h" });
+            
+          // ✅ เก็บ Token ใน Session
+          req.session.token = token;
+          req.session.student_id = user.student_id;
+
+          // ✅ ปิด Popup แล้วให้ React ดึง Token ผ่าน API `/auth/user`
+          res.send(`<script>
+              window.opener && window.opener.postMessage("success", "http://localhost:3000");
+              window.close();
+          </script>`);
+        });
+      }
+    }catch (err) {
+    console.error("Token verification error:", err);
+    res.status(401).json({ error: "Invalid Google ID Token" });
+    }
   }
 );
+
+app.get("/auth/user", (req, res) => {
+  if (!req.session.token) {
+      return res.status(401).json({ error: "Not authenticated" });
+  }
+  res.json({ student_id: req.session.student_id, token: req.session.token });
+});
 
 
 // Register User
@@ -142,17 +182,17 @@ app.post('/register', async (req, res) => {
     console.log('Unauthorized req.user:', req.user);
     return res.status(401).json({ message: 'Unauthorized. Please login through Google first.' });
   }
-  const { username, student_id, department, phone_num, password } = req.body;
+  const { username, student_id, phone_num, password } = req.body;
   console.log('req.body in /register:', req.body);
   const email = req.user.email; // Email should now be accessible via req.user
 
-  if (!username || !student_id || !department || !phone_num || !password) {
+  if (!username || !student_id || !phone_num || !password) {
     return res.status(400).json({ message: 'All fields are required.' });
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  const query = 'UPDATE users SET username = ?, student_id = ?, department = ?, phone_num = ?, password = ?, is_profile_complete = ? WHERE email = ?';
-  db.query(query, [username, student_id, department, phone_num, hashedPassword, 1, email], (err, result) => {
+  const query = 'UPDATE users SET username = ?, student_id = ?, phone_num = ?, password = ?, is_profile_complete = ? WHERE email = ?';
+  db.query(query, [username, student_id, phone_num, hashedPassword, 1, email], (err, result) => {
     if (err) {
       console.error('Database Update Error:', err); // แสดง error
       return res.status(500).json({ message: 'Error registering user.' });
@@ -164,7 +204,6 @@ app.post('/register', async (req, res) => {
 //Google Login
 app.post("/google-login", async (req, res) => {
   const { idToken } = req.body;
-
   try {
     const payload = await verifyToken(idToken);
     const email = payload.email;
@@ -222,7 +261,7 @@ app.post("/login", (req, res) => {
 app.get("/user/:student_id", (req, res) => {
   const { student_id } = req.params;
 
-  const query = "SELECT username, email, department, phone_num, is_profile_complete,student_id, role FROM users WHERE student_id = ?";
+  const query = "SELECT username, email, phone_num, is_profile_complete,student_id, role FROM users WHERE student_id = ?";
   db.query(query, [student_id], (err, result) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (result.length === 0) return res.status(404).json({ error: "User not found" });

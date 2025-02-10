@@ -178,63 +178,52 @@ app.get("/auth/user", (req, res) => {
 app.post('/register', async (req, res) => {
   console.log('Session in /register:', req.session); // Debug session
   console.log('req.user in /register:', req.user); // Debug req.user
-  if (!req.user) {
-    console.log('Unauthorized req.user:', req.user);
-    return res.status(401).json({ message: 'Unauthorized. Please login through Google first.' });
-  }
-  const { username, student_id, phone_num, password } = req.body;
   console.log('req.body in /register:', req.body);
-  const email = req.user.email; // Email should now be accessible via req.user
 
-  if (!username || !student_id || !phone_num || !password) {
-    return res.status(400).json({ message: 'All fields are required.' });
-  }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const query = 'UPDATE users SET username = ?, student_id = ?, phone_num = ?, password = ?, is_profile_complete = ? WHERE email = ?';
-  db.query(query, [username, student_id, phone_num, hashedPassword, 1, email], (err, result) => {
-    if (err) {
-      console.error('Database Update Error:', err); // แสดง error
-      return res.status(500).json({ message: 'Error registering user.' });
+  if( req.body.role == 'student'){
+    console.log(req.body.role);
+
+    if (!req.user) {
+      console.log('Unauthorized req.user:', req.user);
+      return res.status(401).json({ message: 'Unauthorized. Please login through Google first.' });
     }
-    res.json({ message: 'Registration complete!' });
-  });
-});
+    const { username, student_id, phone_num, password,role } = req.body;
+    const email = req.user.email; // Email should now be accessible via req.user
 
-//Google Login
-app.post("/google-login", async (req, res) => {
-  const { idToken } = req.body;
-  try {
-    const payload = await verifyToken(idToken);
-    const email = payload.email;
+    if (!username||!student_id|| !phone_num || !password) {
+      return res.status(400).json({ message: 'All fields are required.' });
+    }
 
-    const query = "SELECT * FROM users WHERE email = ?";
-    db.query(query, [email], (err, result) => {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const query = 'UPDATE users SET username = ?, student_id = ?, phone_num = ?, password = ?, is_profile_complete = ? ,role = ? WHERE email = ?';
+    db.query(query, [username, student_id, phone_num, hashedPassword, 1,role, email], (err, result) => {
       if (err) {
-        console.error("Database error:", err);
-        return res.status(500).json({ error: "Database error" });
+        console.error('Database Update Error:', err); // แสดง error
+        return res.status(500).json({ message: 'Error registering user.' });
       }
-
-      if (result.length === 0) {
-        return res.status(404).json({ error: "User not found. Please register first." });
-      }
-
-      const user = result[0];
-      const token = jwt.sign({ studentId: user.student_id }, "secret_key", { expiresIn: "1h" });
-
-      res.json({
-        message: "Google Login successful",
-        token,
-        student_id: user.student_id,
-        username: user.username,
-        is_profile_complete: user.is_profile_complete,
-      });
+      res.json({ message: 'Registration complete!' });
     });
-  } catch (err) {
-    console.error("Token verification error:", err);
-    res.status(401).json({ error: "Invalid Google ID Token" });
+  }
+
+  else if(req.body.role == 'admin'){
+    console.log(req.body.role)
+    const { email,username, student_id, phone_num, password,role } = req.body;
+    if (!username||!email|| !phone_num || !password) {
+      return res.status(400).json({ message: 'All fields are required.' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const insertQuery = 'INSERT INTO users (username,student_id,phone_num,password,is_profile_complete,role,email) VALUES (?,?,?,?,?,?,?)';
+    db.query(insertQuery, [username, student_id, phone_num, hashedPassword, 1,role, email], (err, result) => {
+      if (err) {
+        console.error('Database Update Error:', err); // แสดง error
+        return res.status(500).json({ message: 'Error registering user.' });
+      }
+      res.json({ message: 'Registration complete!' });
+    });
   }
 });
+
 
 
 //Login
@@ -257,12 +246,47 @@ app.post("/login", (req, res) => {
   });
 });
 
+//Admin Login
+app.post("/admin-login", (req, res) => {
+  console.log(req.body)
+
+  const { email, password } = req.body;
+
+  const query = "SELECT * FROM users WHERE email = ?";
+  db.query(query, [email], (err, result) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      if (result.length === 0) return res.status(404).json({ error: "User not found" });
+
+      const user = result[0];
+      console.log(user)
+      bcrypt.compare(password, user.password, (err, isMatch) => {
+          if (err) return res.status(500).json({ error: "Error comparing passwords" });
+          if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
+
+          const token = jwt.sign({ email: user.email }, "secret_key", { expiresIn: "1h" });
+          res.json({ message: "Login successful", token, email: user.email });
+      });
+  });
+});
 //API ดึงข้อมูล Profile
 app.get("/user/:student_id", (req, res) => {
   const { student_id } = req.params;
 
   const query = "SELECT username, email, phone_num, is_profile_complete,student_id, role FROM users WHERE student_id = ?";
   db.query(query, [student_id], (err, result) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      if (result.length === 0) return res.status(404).json({ error: "User not found" });
+
+      res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+  });
+});
+
+//API ดึงข้อมูล Profile Select by Email
+app.get("/user-email/:email", (req, res) => {
+  const { email } = req.params;
+  console.log(email);
+  const query = "SELECT username, email, phone_num, is_profile_complete,student_id, role FROM users WHERE email = ?";
+  db.query(query, [email], (err, result) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (result.length === 0) return res.status(404).json({ error: "User not found" });
 

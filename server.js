@@ -29,8 +29,8 @@ app.use(cors({
 
 // ตั้งค่าการเชื่อมต่อกับฐานข้อมูล
 const db = mysql.createConnection({
-    host: '25.14.131.252',
-    user: 'remote_user',
+    host: 'localhost',
+    user: 'root',
     password: '1234',
     database: 'kucoop_project' 
 });
@@ -220,8 +220,9 @@ app.post("/login", (req, res) => {
 //API ดึงข้อมูล Profile
 app.get("/user/:student_id", (req, res) => {
   const { student_id } = req.params;
+  console.log(student_id)
 
-  const query = "SELECT username, email, department, phone_num, is_profile_complete,student_id, role FROM users WHERE student_id = ?";
+  const query = "SELECT username, email, phone_num, is_profile_complete,student_id, role FROM users WHERE student_id = ?";
   db.query(query, [student_id], (err, result) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (result.length === 0) return res.status(404).json({ error: "User not found" });
@@ -549,6 +550,45 @@ app.get("/allpetitions", (req, res) => {
       res.status(200).json(results);
     }
   });
+});
+
+//coopproject
+// ตั้งค่าการอัปโหลดไฟล์สำหรับโปรเจกต์
+const CoopProject_storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, './uploads/coopproject/'); // โฟลเดอร์ที่เก็บไฟล์
+  },
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    cb(null, `${timestamp}-${file.originalname}`); // กำหนดชื่อไฟล์
+  },
+});
+
+// ตั้งค่า multer พร้อมตรวจสอบไฟล์ให้รับเฉพาะ PDF
+const CoopProject_upload = multer({
+  storage: CoopProject_storage,
+  fileFilter, // ใช้ fileFilter ที่กำหนดไว้แล้ว
+});
+
+// API สำหรับรับข้อมูลจาก React สำหรับโปรเจกต์
+app.post("/api/coopproject", CoopProject_upload.single("FilePath"), (req, res) => {
+  const { student_id, ProjectTitle, ProjectDetails, Advisor, Committee1, Committee2 } = req.body;
+  const filePath = req.file ? req.file.path : null; // เก็บเส้นทางไฟล์
+  console.log(req.body)
+  console.log(filePath)
+
+  const sql = "INSERT INTO coopproject (student_id, ProjectTitle, ProjectDetails, Advisor, Committee1, Committee2, FilePath) VALUES (?, ?, ?, ?, ?, ?, ?)";
+  const values = [student_id, ProjectTitle, ProjectDetails, Advisor, Committee1, Committee2, filePath];
+  console.log(values)
+
+  db.query(sql, values, (err, result) => {
+    if (err) {
+        console.error("MySQL Error: ", err);
+        return res.status(500).json({ error: err });
+    }
+    res.json({ message: "บันทึกข้อมูลสำเร็จ" });
+  });
+
 });
 
 

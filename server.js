@@ -323,6 +323,20 @@ app.get("/user_info/:student_id", (req, res) => {
   });
 });
 
+//API ดึงข้อมูล user Sort by role
+app.get("/user", (req, res) => {
+
+  const query = "SELECT * FROM users ORDER BY username ";
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.status(200).json(results);
+    }
+  });
+});
+
 //Post Info
 app.post("/studentsinfo", (req, res) => {
   const { first_name, last_name, student_id, major, year, email, phone_number } = req.body;

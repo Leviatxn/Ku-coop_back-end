@@ -30,10 +30,10 @@ app.use(cors({
 
 // ตั้งค่าการเชื่อมต่อกับฐานข้อมูล
 const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: '1234',
-    database: 'kucoop_project' 
+  host: '25.14.131.252',
+  user: 'remote_user',
+  password: '1234',
+  database: 'kucoop_project' 
 });
 
 db.connect((err) => {

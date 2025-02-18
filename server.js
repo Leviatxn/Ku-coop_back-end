@@ -18,7 +18,9 @@ app.use(bodyParser.json());
 app.use(express.static("uploads"));
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/uploads", express.static(path.join(__dirname)));
+
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
 
 
 // Enable CORS
@@ -312,7 +314,8 @@ app.get("/user_info/:student_id", (req, res) => {
       current_petition, 
       lastest_coopapplication, 
       lastest_studentcoopapplication, 
-      current_state
+      current_state,
+      profile_img
     FROM studentsinfo
     WHERE student_id = ?`;
 
@@ -352,18 +355,54 @@ app.get("/studentsinfo", (req, res) => {
     }
   });
 });
+
+// กำหนดที่เก็บไฟล์อัปโหลด
+const profile_storage = multer.diskStorage({
+  destination: './uploads/userProfile/',
+  filename: (req, file, cb) => {
+      cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const profile_upload = multer({ storage:profile_storage });
+// อัปเดตข้อมูลรูปภาพ
+app.put("/addstudent_profile/:student_id", profile_upload.single("profile_img"), (req, res) => {
+  const student_id = req.params.student_id;
+  const profile_img = req.file ? `/uploads/userProfile/${req.file.filename}` : null;
+  console.log(req.file)
+  let query = `
+    UPDATE studentsinfo 
+    SET profile_img=?
+    WHERE student_id=?
+  `;
+
+  let params = [];
+  if (profile_img) params.push(profile_img);
+  params.push(student_id);
+
+  db.query(query, params, (err, result) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      res.json({ message: "User updated successfully", profile_img });
+  });
+});
+
 //Post Info
-app.post("/addstudentsinfo", (req, res) => {
-  const { first_name, last_name, student_id, major, year, email, phone_number } = req.body;
+app.put("/addstudentsinfo/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  console.log(student_id);
+  console.log(req.body);
+
+  const { first_name, last_name, major, year, email, phone_number } = req.body;
 
   const query = `
-    INSERT INTO studentsinfo (first_name, last_name, student_id, major, year, email, phone_number)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    UPDATE studentsinfo 
+    SET first_name=?, last_name=?, major=?, year=?, email=?, phone_number=?
+    WHERE student_id=?
   `;
 
   db.query(
     query,
-    [first_name, last_name, student_id, major, year, email, phone_number],
+    [first_name, last_name, major, year, email, phone_number,student_id],
     (err, result) => {
       if (err) {
         console.error(err);
@@ -893,7 +932,6 @@ app.get("/coopapplication/:ApplicationID", (req, res) => {
       res.status(500).send("Failed to fetch data");
     } else {
       res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
-
     }
   });
 });

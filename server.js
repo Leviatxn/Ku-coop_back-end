@@ -860,6 +860,44 @@ app.get("/allpetitions", (req, res) => {
   });
 });
 
+
+//ดึงคำร้องขอเป็นนิสิต sort by application_id
+app.get("/studentcoopapplication/:ApplicationID", (req, res) => {
+  const {ApplicationID} = req.params;
+
+  const query = `
+    SELECT * FROM studentcoopapplication WHERE ApplicationID = ?
+  `;
+
+  db.query(query,[ApplicationID],(err, result) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+    }
+  });
+});
+
+//ดึงคำร้องขอตทำงาน sort by application_id
+app.get("/coopapplication/:ApplicationID", (req, res) => {
+  const {ApplicationID} = req.params;
+
+  const query = `
+    SELECT * FROM coopapplication WHERE ApplicationID = ?
+  `;
+
+  db.query(query,[ApplicationID],(err, result) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+
+    }
+  });
+});
+
 //coopproj ect
 // ตั้งค่าการอัปโหลดไฟล์สำหรับโปรเจกต์
 const CoopProject_storage = multer.diskStorage({

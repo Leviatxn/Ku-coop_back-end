@@ -30,8 +30,8 @@ app.use(cors({
 
 // ตั้งค่าการเชื่อมต่อกับฐานข้อมูล
 const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
+    host: '25.14.131.252',
+    user: 'remote_user',
     password: '1234',
     database: 'kucoop_project' 
 });
@@ -271,7 +271,6 @@ app.post("/admin-login", (req, res) => {
 //API ดึงข้อมูล Profile
 app.get("/user/:student_id", (req, res) => {
   const { student_id } = req.params;
-  console.log(student_id)
 
   const query = "SELECT username, email, phone_num, is_profile_complete,student_id, role FROM users WHERE student_id = ?";
   db.query(query, [student_id], (err, result) => {
@@ -821,6 +820,45 @@ app.get("/allpetitions", (req, res) => {
   });
 });
 
+//ดึงคำร้องขอเป็นนิสิต sort by application_id
+app.get("/studentcoopapplication/:ApplicationID", (req, res) => {
+  const {ApplicationID} = req.params;
+
+  const query = `
+    SELECT * FROM studentcoopapplication WHERE ApplicationID = ?
+  `;
+
+  db.query(query,[ApplicationID],(err, result) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+    }
+  });
+});
+
+//ดึงคำร้องขอตทำงาน sort by application_id
+app.get("/coopapplication/:ApplicationID", (req, res) => {
+  const {ApplicationID} = req.params;
+
+  const query = `
+    SELECT * FROM coopapplication WHERE ApplicationID = ?
+  `;
+
+  db.query(query,[ApplicationID],(err, result) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+
+    }
+  });
+});
+
+
+
 //coopproj ect
 // ตั้งค่าการอัปโหลดไฟล์สำหรับโปรเจกต์
 const CoopProject_storage = multer.diskStorage({
@@ -879,7 +917,6 @@ app.get("/coopproject/:student_id", (req, res) => {
     res.json(result[0]);  // ส่งข้อมูลของโปรเจกต์ที่ตรงกับ student_id กลับไป
   });
 });
-
 
 // Start Server
 app.listen(5000, () => {

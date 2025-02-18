@@ -271,7 +271,6 @@ app.post("/admin-login", (req, res) => {
 //API ดึงข้อมูล Profile
 app.get("/user/:student_id", (req, res) => {
   const { student_id } = req.params;
-  console.log(student_id)
 
   const query = "SELECT username, email, phone_num, is_profile_complete,student_id, role FROM users WHERE student_id = ?";
   db.query(query, [student_id], (err, result) => {
@@ -339,6 +338,7 @@ app.get("/user", (req, res) => {
 });
 
 
+
 //API ดึงข้อมูล user Sort by role
 app.get("/studentsinfo", (req, res) => {
 
@@ -352,6 +352,7 @@ app.get("/studentsinfo", (req, res) => {
     }
   });
 });
+
 //Post Info
 app.post("/addstudentsinfo", (req, res) => {
   const { first_name, last_name, student_id, major, year, email, phone_number } = req.body;
@@ -898,6 +899,7 @@ app.get("/coopapplication/:ApplicationID", (req, res) => {
   });
 });
 
+
 //coopproj ect
 // ตั้งค่าการอัปโหลดไฟล์สำหรับโปรเจกต์
 const CoopProject_storage = multer.diskStorage({
@@ -956,7 +958,6 @@ app.get("/coopproject/:student_id", (req, res) => {
     res.json(result[0]);  // ส่งข้อมูลของโปรเจกต์ที่ตรงกับ student_id กลับไป
   });
 });
-
 
 // Start Server
 app.listen(5000, () => {

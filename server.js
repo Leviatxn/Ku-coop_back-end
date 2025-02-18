@@ -846,6 +846,26 @@ app.post("/api/coopproject", CoopProject_upload.single("FilePath"), (req, res) =
 
 });
 
+// API สำหรับดึงข้อมูลโปรเจกต์ตาม student_id
+app.get("/coopproject/:student_id", (req, res) => {
+  const { student_id } = req.params;  // รับค่า student_id จาก URL
+
+  // คำสั่ง SQL สำหรับดึงข้อมูลจากฐานข้อมูล
+  const sql = "SELECT * FROM coopproject WHERE student_id = ?";
+  db.query(sql, [student_id], (err, result) => {
+    if (err) {
+      console.error("MySQL Error: ", err);
+      return res.status(500).json({ error: err });
+    }
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "ไม่พบข้อมูลโครงงานสำหรับ student_id นี้" });
+    }
+
+    res.json(result[0]);  // ส่งข้อมูลของโปรเจกต์ที่ตรงกับ student_id กลับไป
+  });
+});
+
 
 // Start Server
 app.listen(5000, () => {

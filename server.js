@@ -341,8 +341,26 @@ app.get("/user", (req, res) => {
 });
 
 
+// API ดึงข้อมูล Info
+app.get("/isCoopstudent/:student_id", (req, res) => {
+  const { student_id } = req.params;
 
-//API ดึงข้อมูล user Sort by role
+  const query = `
+    SELECT 
+      is_coopstudent
+    FROM studentsinfo
+    WHERE student_id = ?`;
+
+  db.query(query, [student_id], (err, result) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    if (result.length === 0) return res.status(404).json({ error: "User not found" });
+
+    res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+  });
+});
+
+
+//API ดึงข้อมูล user 
 app.get("/studentsinfo", (req, res) => {
 
   const query = "SELECT first_name, last_name, student_id, major, year, phone_number,is_coopstudent,company_name  FROM studentsinfo ";
@@ -631,10 +649,10 @@ app.post("/coopstudentapplication", Totalcredits_upload.single('TotalCredits_Fil
 
     const query = `
       INSERT INTO StudentCoopApplication 
-      (StudentID, FullName, Major, Year, Email, PhoneNumber, TotalCredits_File,Progress_State,Petition_name,Petition_version) 
-      VALUES (?, ?, ?, ?, ?, ?, ? ,?, ? , ?)`;
+      (StudentID, FullName, Major, Year, Email, PhoneNumber, TotalCredits_File,Progress_State,Petition_name,Petition_version,Is_inprogress) 
+      VALUES (?, ?, ?, ?, ?, ?, ? ,?, ? , ?, ?)`;
 
-  db.query(query,[StudentID, FullName, Major, Year, Email, PhoneNumber, totalCreditsFile,0,PetitionName,newVersion],
+  db.query(query,[StudentID, FullName, Major, Year, Email, PhoneNumber, totalCreditsFile,0,PetitionName,newVersion,1],
     (err, result) => {
       if (err) {
         console.error('Error inserting data:', err);
@@ -664,6 +682,9 @@ app.post("/coopapplicationsubmit",RelatedFiles_upload.array("relatedFiles", 4),(
       CompanyProvince,
       CompanyPhoneNumber,
       PetitionName,
+      Allowance,
+      Coop_StartDate,
+      Coop_EndDate,
     } = req.body;
 
     const files = req.files;
@@ -709,13 +730,12 @@ app.post("/coopapplicationsubmit",RelatedFiles_upload.array("relatedFiles", 4),(
       console.log(newVersion)
 
       const query = `
-        INSERT INTO coopapplication (
-          StudentID, FullName, Major, Year, Email, PhoneNumber,
-          CompanyNameTH, CompanyNameEN, CompanyAddress, CompanyProvince, 
-          CompanyPhoneNumber, FilePath, Petition_name, Progress_State,Petition_version
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
+      INSERT INTO coopapplication 
+      (StudentID, FullName, Major, Year, Email, PhoneNumber, CompanyNameTH, 
+      CompanyNameEN, CompanyAddress, CompanyProvince, CompanyPhoneNumber, FilePath, 
+      Petition_name, Progress_State, Petition_version, Allowance, Coop_StartDate, Coop_EndDate,Is_inprogress) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
+    `;
 
       const values = [
         StudentID,
@@ -733,6 +753,10 @@ app.post("/coopapplicationsubmit",RelatedFiles_upload.array("relatedFiles", 4),(
         PetitionName || "คำร้องขอปฏิบัติงานสหกิจศึกษา",
         0, // rPogress_State เริ่มต้นเป็น 0
         newVersion,
+        Allowance,
+        Coop_StartDate,
+        Coop_EndDate,
+        1
       ];
 
       // บันทึกข้อมูลลงใน MySQL
@@ -782,7 +806,7 @@ app.get("/petitions/:student_id", (req, res) => {
       coopapplication 
   WHERE StudentID = ?
   
-  ORDER BY Petition_version DESC;
+  ORDER BY SubmissionDate DESC;
 ;
   `;
 
@@ -810,7 +834,8 @@ app.get("/lastpetition/:student_id", (req, res) => {
         Petition_name,
         Petition_version,
         Progress_State,
-        SubmissionDate
+        SubmissionDate,
+        Is_inprogress
     FROM (
         SELECT 
             ApplicationID,
@@ -821,7 +846,8 @@ app.get("/lastpetition/:student_id", (req, res) => {
             Petition_name,
             Petition_version,
             Progress_State,
-            SubmissionDate
+            SubmissionDate,
+            Is_inprogress
         FROM studentcoopapplication
         WHERE StudentID = ?
 
@@ -836,7 +862,8 @@ app.get("/lastpetition/:student_id", (req, res) => {
             Petition_name,
             Petition_version,
             Progress_State,
-            SubmissionDate
+            SubmissionDate,
+            Is_inprogress
         FROM coopapplication
         WHERE StudentID = ?
     ) AS combined_data

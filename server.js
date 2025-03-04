@@ -32,8 +32,8 @@ app.use(cors({
 
 // ตั้งค่าการเชื่อมต่อกับฐานข้อมูล
 const db = mysql.createConnection({
-  host: '25.14.131.252',
-  user: 'remote_user',
+  host: 'localhost',
+  user: 'root',
   password: '1234',
   database: 'kucoop_project' 
 });
@@ -1128,6 +1128,7 @@ app.post("/api/coopproject", CoopProject_upload.single("FilePath"), (req, res) =
 
 });
 
+//project
 // API สำหรับดึงข้อมูลโปรเจกต์ตาม student_id
 app.get("/coopproject/:student_id", (req, res) => {
   const { student_id } = req.params;  // รับค่า student_id จาก URL
@@ -1145,6 +1146,104 @@ app.get("/coopproject/:student_id", (req, res) => {
     }
 
     res.json(result[0]);  // ส่งข้อมูลของโปรเจกต์ที่ตรงกับ student_id กลับไป
+  });
+});
+
+// Express.js API endpoint สำหรับอัพเดทสถานะโปรเจค
+app.put('/updateProjectStatus/:ProjectID', async (req, res) => {
+  const { ProjectID } = req.params;
+  const { project_state } = req.body;
+
+  // ตรวจสอบว่า project_state มีค่าหรือไม่
+  if (project_state === undefined || project_state === null) {
+    return res.status(400).json({ message: 'Missing project state' });
+  }
+
+  try {
+    // การใช้ SQL Query เพื่ออัปเดตสถานะ
+    const query = 'UPDATE coopproject SET project_state = ? WHERE ProjectID = ?';
+    const [result] = await db.promise().query(query, [project_state, ProjectID]);
+
+    // ตรวจสอบว่ามีการอัปเดตหรือไม่
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    res.json({ message: 'Project status updated successfully' });
+  } catch (err) {
+    console.error('Error updating project status:', err);
+    return res.status(500).json({ message: 'Error updating project status' });
+  }
+});
+
+
+
+app.get("/allprojects", (req, res) => {
+  const sql = `
+    SELECT 
+        c.ProjectID, 
+        s.student_id AS StudentID,
+        CONCAT(s.first_name, ' ', s.last_name) AS FullName,
+        s.major AS Major,
+        s.year AS Year,
+        c.ProjectTitle,
+        c.project_state
+    FROM coopproject c
+    JOIN studentsinfo s ON c.student_id = s.student_id
+    ORDER BY c.SubmissionDate DESC;
+  `;
+
+  db.query(sql, (err, result) => {
+    if (err) {
+      console.error("❌ Error fetching data:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    res.json(result);
+  });
+});
+
+
+
+// API สำหรับดึงรายละเอียดโปรเจคตาม ProjectID
+app.get("/projectdetails/:projectId", (req, res) => {
+  const { projectId } = req.params; // ดึง projectId จาก URL
+  const sql = `
+    SELECT
+      cp.student_id, 
+      cp.ProjectTitle,
+      cp.ProjectDetails,
+      cp.Advisor,
+      cp.Committee1,
+      cp.Committee2,
+      cp.FilePath,
+      cp.SubmissionDate,
+      cp.project_state
+    FROM 
+      coopproject cp
+    WHERE 
+      cp.ProjectID = ?;
+  `;
+
+  db.query(sql, [projectId], (err, result) => {
+    if (err) {
+      console.error("MySQL Error:", err);
+      return res.status(500).json({ error: 'มีข้อผิดพลาดในการดึงข้อมูลโปรเจค' });
+    }
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "ไม่พบข้อมูลโปรเจค" });
+    }
+
+    const project = result[0];
+    
+    // ตรวจสอบว่า FilePath มีค่าเป็นค่าว่างหรือไม่
+    if (project.FilePath) {
+      // แยกชื่อไฟล์ที่คั่นด้วย ',' และจัดการกับลิงก์ไฟล์
+      project.Files = project.FilePath.split(',').map(file => `/uploads/${file.trim()}`);
+    } else {
+      project.Files = []; // ถ้าไม่มีไฟล์
+    }
+    res.json(project);
   });
 });
 

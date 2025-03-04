@@ -961,18 +961,32 @@ app.get("/coopproject/:student_id", (req, res) => {
 });
 
 // Express.js API endpoint สำหรับอัพเดทสถานะโปรเจค
-app.put('/updateProjectStatus/:ProjectID', (req, res) => {
+app.put('/updateProjectStatus/:ProjectID', async (req, res) => {
   const { ProjectID } = req.params;
   const { project_state } = req.body;
 
-  const query = 'UPDATE coopproject SET project_state = ? WHERE ProjectID = ?';
-  db.query(query, [project_state, ProjectID], (err, result) => {
-    if (err) {
-      return res.status(500).json({ message: 'Error updating project status' });
+  // ตรวจสอบว่า project_state มีค่าหรือไม่
+  if (project_state === undefined || project_state === null) {
+    return res.status(400).json({ message: 'Missing project state' });
+  }
+
+  try {
+    // การใช้ SQL Query เพื่ออัปเดตสถานะ
+    const query = 'UPDATE coopproject SET project_state = ? WHERE ProjectID = ?';
+    const [result] = await db.promise().query(query, [project_state, ProjectID]);
+
+    // ตรวจสอบว่ามีการอัปเดตหรือไม่
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Project not found' });
     }
+
     res.json({ message: 'Project status updated successfully' });
-  });
+  } catch (err) {
+    console.error('Error updating project status:', err);
+    return res.status(500).json({ message: 'Error updating project status' });
+  }
 });
+
 
 
 app.get("/allprojects", (req, res) => {
@@ -983,7 +997,8 @@ app.get("/allprojects", (req, res) => {
         CONCAT(s.first_name, ' ', s.last_name) AS FullName,
         s.major AS Major,
         s.year AS Year,
-        c.ProjectTitle
+        c.ProjectTitle,
+        c.project_state
     FROM coopproject c
     JOIN studentsinfo s ON c.student_id = s.student_id
     ORDER BY c.SubmissionDate DESC;
@@ -999,6 +1014,7 @@ app.get("/allprojects", (req, res) => {
 });
 
 
+
 // API สำหรับดึงรายละเอียดโปรเจคตาม ProjectID
 app.get("/projectdetails/:projectId", (req, res) => {
   const { projectId } = req.params; // ดึง projectId จาก URL
@@ -1011,7 +1027,8 @@ app.get("/projectdetails/:projectId", (req, res) => {
       cp.Committee1,
       cp.Committee2,
       cp.FilePath,
-      cp.SubmissionDate
+      cp.SubmissionDate,
+      cp.project_state
     FROM 
       coopproject cp
     WHERE 

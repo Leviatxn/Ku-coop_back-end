@@ -299,7 +299,7 @@ app.get("/user-email/:email", (req, res) => {
 // API ดึงข้อมูล Info
 app.get("/user_info/:student_id", (req, res) => {
   const { student_id } = req.params;
-
+  console.log(student_id);
   const query = `
     SELECT 
       first_name, 
@@ -309,11 +309,12 @@ app.get("/user_info/:student_id", (req, res) => {
       year, 
       email, 
       phone_number, 
-      digital_id, 
+      company_name, 
       current_petition, 
       lastest_coopapplication, 
       lastest_studentcoopapplication, 
       current_state,
+      coop_state,
       profile_img
     FROM studentsinfo
     WHERE student_id = ?`;
@@ -322,6 +323,91 @@ app.get("/user_info/:student_id", (req, res) => {
     if (err) return res.status(500).json({ error: "Database error" });
     if (result.length === 0) return res.status(404).json({ error: "User not found" });
 
+    res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+  });
+});
+
+
+// API ดึงข้อมูล Info
+app.get("/coop_info/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  console.log(student_id);
+  const query = `
+    SELECT 
+      CompanyNameTH,
+      CompanyNameEN,
+      CompanyAddress,
+      CompanyProvince,
+      FilePath,
+      Allowance,
+      CompanyPhoneNumber,
+      Coop_StartDate,
+      Coop_EndDate
+    FROM coopapplication
+    WHERE StudentID = ? AND Is_approve = 1;`;
+
+  db.query(query, [student_id], (err, result) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    if (result.length === 0) return res.status(404).json({ error: "User not found" });
+
+    res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+  });
+});
+
+// API ดึงข้อมูล Info
+app.get("/first_appointment/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  console.log(student_id);
+  const query = `
+    SELECT 
+      student_id,
+      appointment_date,
+      appointment_time,
+      appointment_type,
+      advisor_id,
+      notes,
+      status,
+      advisor_date,
+      advisor_time,
+      is_accept,
+      travel_type
+    FROM appointments1
+    WHERE student_id = ?;`;
+
+  db.query(query, [student_id], (err, result) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    if (result.length === 0) return res.status(404).json({ error: "User not found" });
+
+    res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+  });
+});
+
+// API ดึงข้อมูล Info
+app.get("/second_appointment/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  console.log(student_id);
+  const query = `
+    SELECT 
+      student_id,
+      appointment_date,
+      appointment_time,
+      appointment_type,
+      advisor_id,
+      notes,
+      status,
+      advisor_date,
+      advisor_time,
+      is_accept,
+      travel_type
+    FROM appointments2
+    WHERE student_id = ?;`;
+
+  db.query(query, [student_id], (err, result) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    if (result.length === 0) {
+      console.log('error user not found');
+      return res.status(404).json({ error: "User not found" });
+    }
     res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
   });
 });
@@ -363,7 +449,21 @@ app.get("/isCoopstudent/:student_id", (req, res) => {
 //API ดึงข้อมูล user 
 app.get("/studentsinfo", (req, res) => {
 
-  const query = "SELECT first_name, last_name, student_id, major, year, phone_number,is_coopstudent,company_name  FROM studentsinfo ";
+  const query = "SELECT first_name, last_name, student_id, major, year, phone_number,is_coopstudent,company_name,coop_state,is_firstappointment,is_secondappointment FROM studentsinfo ";
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.status(200).json(results);
+    }
+  });
+});
+
+//API ดึงข้อมูล user 
+app.get("/studentsCoopinfo", (req, res) => {
+
+  const query = "SELECT first_name, last_name, student_id, major, year, phone_number,is_coopstudent,company_name,coop_state,is_firstappointment,is_secondappointment FROM studentsinfo WHERE is_coopstudent = 1";
   db.query(query, (err, results) => {
     if (err) {
       console.error("Error fetching data:", err);
@@ -534,6 +634,30 @@ app.post("/current_petition", (req, res) => {
     } else {
       res.status(200).send("Data updated successfully");
     }
+  });
+});
+
+app.post("/addAppointment/:student_id", (req, res) => {
+  console.log("📌 API ถูกเรียกใช้");
+  console.log(req.body);
+  console.log("📌 student_id:", req.params);
+  const { student_id } = req.params;  // รับค่า student_id จาก URL
+  const { appointment_date, appointment_time, Notes } = req.body;
+  if ( !appointment_date || !appointment_time ) {
+    return res.status(400).json({ error: "กรุณากรอกข้อมูลให้ครบถ้วน" });
+  }
+
+  const query = `
+    INSERT INTO appointments1 (student_id, appointment_date, appointment_time, notes, status, created_at)
+    VALUES (?, ?, ?, ?, 'Scheduled', NOW());
+  `;
+
+  db.query(query, [student_id, appointment_date, appointment_time, Notes], (err, result) => {
+    if (err) {
+      console.error("Insert Error:", err);
+      return res.status(500).json({ error: "เกิดข้อผิดพลาดในการเพิ่มข้อมูล" });
+    }
+    res.status(200).json({ message: "เพิ่มการนัดหมายสำเร็จ", appointment_id: result.insertId });
   });
 });
 
@@ -1024,7 +1148,8 @@ app.get("/coopproject/:student_id", (req, res) => {
   });
 });
 
+
 // Start Server
 app.listen(5000, () => {
-  console.log('Server is running on http://localhost:5000');
+  console.log('Server is running on http://localhost:5000');  
 });

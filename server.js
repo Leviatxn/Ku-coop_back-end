@@ -580,8 +580,32 @@ app.put("/addstudent_profile/:student_id", profile_upload.single("profile_img"),
   });
 });
 
+app.post("/addstudentsinfo", (req, res) => {
+  console.log(req.body);
+
+  const { student_id, first_name, last_name, major, year, email, phone_number } = req.body;
+
+  const query = `
+      INSERT INTO studentsinfo (student_id, first_name, last_name, major, year, email, phone_number) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.query(
+      query,
+      [student_id, first_name, last_name, major, year, email, phone_number],
+      (err, result) => {
+          if (err) {
+              console.error(err);
+              res.status(500).send("Error inserting data");
+          } else {
+              res.status(201).send("Data inserted successfully");
+          }
+      }
+  );
+});
+
 //Post Info
-app.put("/addstudentsinfo/:student_id", (req, res) => {
+app.put("/updatestudentsinfo/:student_id", (req, res) => {
   const { student_id } = req.params;
   console.log(student_id);
   console.log(req.body);
@@ -1581,7 +1605,7 @@ app.get('/sections', (req, res) => {
 
 // ดึงหัวข้อหลักทั้งหมด
 app.get('/firstsupervision_sections', (req, res) => {
-  const sql = 'SELECT * FROM evaluation_sections';
+  const sql = 'SELECT * FROM evaluation_sections WHERE ';
   db.query(sql, (err, results) => {
       if (err) {
           console.error(err);

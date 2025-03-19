@@ -1605,7 +1605,19 @@ app.get('/sections', (req, res) => {
 
 // ดึงหัวข้อหลักทั้งหมด
 app.get('/firstsupervision_sections', (req, res) => {
-  const sql = 'SELECT * FROM evaluation_sections WHERE ';
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_id IN (1,2,3,4,5,6)';
+  db.query(sql, (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/secondsupervision_sections', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_id IN (1,2,3,7,5,6)';
   db.query(sql, (err, results) => {
       if (err) {
           console.error(err);

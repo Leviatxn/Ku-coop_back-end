@@ -1627,6 +1627,18 @@ app.get('/secondsupervision_sections', (req, res) => {
   });
 });
 
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/projectevaluation_sections', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_id IN (8,9,10,11)';
+  db.query(sql, (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
 // ดึงหัวข้อย่อยของแต่ละหัวข้อหลัก
 app.get('/criteria/:section_id', (req, res) => {
   const { section_id } = req.params;

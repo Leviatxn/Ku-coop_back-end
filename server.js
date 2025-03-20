@@ -1591,6 +1591,61 @@ app.get("/projectdetails/:projectId", (req, res) => {
   });
 });
 
+
+app.get('/evaluations/:studentID/:version', (req, res) => {
+  const { studentID, version } = req.params;
+
+  // สร้างคำสั่ง SQL เพื่อดึงข้อมูล evaluation
+  const sql = `
+    SELECT * FROM evaluations
+    WHERE student_id = ? AND evaluation_version = ?
+  `;
+
+  // ทำการ query ข้อมูล
+  db.query(sql, [studentID, version], (err, results) => {
+    if (err) {
+      console.error('Error fetching evaluation data:', err);
+      return res.status(500).json({ error: 'Failed to fetch evaluation data' });
+    }
+
+    if (results.length > 0) {
+      // ส่งข้อมูล evaluation กลับไป
+      res.status(200).json(results[0]);
+    } else {
+      // หากไม่พบข้อมูล
+      res.status(404).json({ message: 'Evaluation not found' });
+    }
+  });
+});
+
+// API สำหรับดึงข้อมูลคะแนนโดยใช้ evaluationID
+app.get('/evaluation_scores/:evaluationID', (req, res) => {
+  const { evaluationID } = req.params;
+
+  // สร้างคำสั่ง SQL เพื่อดึงข้อมูลคะแนน
+  const sql = `
+    SELECT * FROM evaluation_scores
+    WHERE evaluation_id = ?
+  `;
+
+  // ทำการ query ข้อมูล
+  db.query(sql, [evaluationID], (err, results) => {
+    if (err) {
+      console.error('Error fetching evaluation scores:', err);
+      return res.status(500).json({ error: 'Failed to fetch evaluation scores' });
+    }
+
+    if (results.length > 0) {
+      // ส่งข้อมูลคะแนนกลับไป
+      res.status(200).json(results);
+    } else {
+      // หากไม่พบข้อมูล
+      res.status(404).json({ message: 'No scores found for this evaluation' });
+    }
+  });
+});
+
+
 // ดึงหัวข้อหลักทั้งหมด
 app.get('/sections', (req, res) => {
   const sql = 'SELECT * FROM evaluation_sections';
@@ -1649,6 +1704,75 @@ app.get('/criteria/:section_id', (req, res) => {
           return res.status(500).json({ error: 'Database query failed' });
       }
       res.json(results);
+  });
+});
+
+app.post("/addevaluation", (req, res) => {
+  console.log(req.body)
+  const { student_id, company_id, evaluator_name, evaluate_by, evaluation_version, evaluation_for, evaluation_type } = req.body;
+
+  if (!student_id || !company_id || !evaluator_name || !evaluate_by || !evaluation_version || !evaluation_for || !evaluation_type) {
+      return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  const query = `
+      INSERT INTO evaluations 
+      (student_id, company_id, evaluator_name, created_at, evaluate_by, evaluation_version, evaluation_for, evaluation_type) 
+      VALUES (?, ?, ?, NOW(), ?, ?, ?, ?)
+  `;
+
+  db.query(
+      query,
+      [student_id, company_id, evaluator_name, evaluate_by, evaluation_version, evaluation_for, evaluation_type],
+      (err, result) => {
+          if (err) {
+              console.error(err);
+              return res.status(500).json({ message: "Error inserting data", error: err });
+          }
+          res.status(201).json({ message: "Evaluation added successfully", evaluation_id: result.insertId });
+      }
+  );
+});
+
+
+app.put('/updateEvaluatedState/:evaluation_id', async (req, res) => {
+  const { evaluationID } = req.params;
+  const query = 'UPDATE evaluations SET is_evaluated = ? WHERE evaluation_id = ?';
+  db.query(query, [1,evaluationID], (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+
+app.post('/evaluation_scores', (req, res) => {
+  const scores = req.body.scores;
+  console.log(scores)
+  if (!scores || !Array.isArray(scores)) {
+    return res.status(400).json({ error: 'Invalid data format' });
+  }
+
+  // สร้างคำสั่ง SQL สำหรับเพิ่มข้อมูล
+  const sql = 'INSERT INTO evaluation_scores (evaluation_id, criteria_id, score, comments) VALUES ?';
+  const values = scores.map((score) => [
+    score.evaluation_id,
+    score.criteria_id,
+    score.score,
+    score.comments || null, // หากไม่มี comments ให้ใช้ null
+  ]);
+
+  // ทำการบันทึกข้อมูล
+  db.query(sql, [values], (err, result) => {
+    if (err) {
+      console.error('Error inserting data:', err);
+      return res.status(500).json({ error: 'Failed to insert data' });
+    }
+
+    console.log('Data inserted successfully:', result);
+    res.status(200).json({ message: 'Data inserted successfully' });
   });
 });
 

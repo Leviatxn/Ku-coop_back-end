@@ -657,6 +657,52 @@ app.put("/updateiscoopstudent", (req, res) => {
   );
 });
 
+//API update สถานะ coop และ companyname
+app.put("/updateFirstevaluation/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  const query = `
+    UPDATE studentsinfo 
+    SET first_evaluate_state = ?
+    WHERE student_id = ?
+  `;
+  db.query(
+    query,
+    [ 1 , student_id],
+    (err, result) => {
+      if (err) {
+        console.error(err);
+        res.status(500).send("Error saving data");
+      } else {
+        res.status(200).send("Data saved successfully");
+      }
+    }
+  );
+});
+
+//API update สถานะ coop และ companyname
+app.put("/updateSecondevaluation/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  const query = `
+    UPDATE studentsinfo 
+    SET second_evaluate_state = ?
+    WHERE student_id = ?
+  `;
+  db.query(
+    query,
+    [ 1 , student_id],
+    (err, result) => {
+      if (err) {
+        console.error(err);
+        res.status(500).send("Error saving data");
+      } else {
+        res.status(200).send("Data saved successfully");
+      }
+    }
+  );
+});
+
+
+
 
 // API สำหรับอัปเดตค่า Is_approve และ Progress_State
 app.put("/updateStudentApplication", (req, res) => {
@@ -1621,6 +1667,7 @@ app.get('/evaluations/:studentID/:version', (req, res) => {
 // API สำหรับดึงข้อมูลคะแนนโดยใช้ evaluationID
 app.get('/evaluation_scores/:evaluationID', (req, res) => {
   const { evaluationID } = req.params;
+  console.log(evaluationID)
 
   // สร้างคำสั่ง SQL เพื่อดึงข้อมูลคะแนน
   const sql = `

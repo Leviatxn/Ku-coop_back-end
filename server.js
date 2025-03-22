@@ -355,8 +355,8 @@ app.get("/user_info/:student_id", (req, res) => {
       phone_number, 
       company_name, 
       current_petition, 
-      lastest_coopapplication, 
-      lastest_studentcoopapplication, 
+      is_firstappointment, 
+      is_secondappointment, 
       current_state,
       coop_state,
       profile_img
@@ -702,7 +702,29 @@ app.put("/updateSecondevaluation/:student_id", (req, res) => {
 });
 
 
-
+//API update สถานะ coop และ companyname
+app.put("/updateCoopState/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  const { currentState } = req.body;
+  console.log(currentState)
+  const query = `
+    UPDATE studentsinfo 
+    SET coop_state = ?
+    WHERE student_id = ?
+  `;
+  db.query(
+    query,
+    [ currentState , student_id],
+    (err, result) => {
+      if (err) {
+        console.error(err);
+        res.status(500).send("Error saving data");
+      } else {
+        res.status(200).send("Data saved successfully");
+      }
+    }
+  );
+});
 
 // API สำหรับอัปเดตค่า Is_approve และ Progress_State
 app.put("/updateStudentApplication", (req, res) => {
@@ -1664,6 +1686,32 @@ app.get('/evaluations/:studentID/:version', (req, res) => {
   });
 });
 
+app.get('/evaluations_type/:studentID/:type', (req, res) => {
+  const { studentID, type } = req.params;
+
+  // สร้างคำสั่ง SQL เพื่อดึงข้อมูล evaluation
+  const sql = `
+    SELECT * FROM evaluations
+    WHERE student_id = ? AND evaluation_type = ?
+  `;
+
+  // ทำการ query ข้อมูล
+  db.query(sql, [studentID, type], (err, results) => {
+    if (err) {
+      console.error('Error fetching evaluation data:', err);
+      return res.status(500).json({ error: 'Failed to fetch evaluation data' });
+    }
+
+    if (results.length > 0) {
+      // ส่งข้อมูล evaluation กลับไป
+      res.status(200).json(results[0]);
+    } else {
+      // หากไม่พบข้อมูล
+      res.status(404).json({ message: 'Evaluation not found' });
+    }
+  });
+});
+
 // API สำหรับดึงข้อมูลคะแนนโดยใช้ evaluationID
 app.get('/evaluation_scores/:evaluationID', (req, res) => {
   const { evaluationID } = req.params;
@@ -1693,10 +1741,11 @@ app.get('/evaluation_scores/:evaluationID', (req, res) => {
 });
 
 
+
 // ดึงหัวข้อหลักทั้งหมด
-app.get('/sections', (req, res) => {
-  const sql = 'SELECT * FROM evaluation_sections';
-  db.query(sql, (err, results) => {
+app.get('/selfEvaluation_sections', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_type = ?';
+  db.query(sql,["self_evaluate"], (err, results) => {
       if (err) {
           console.error(err);
           return res.status(500).json({ error: 'Database query failed' });

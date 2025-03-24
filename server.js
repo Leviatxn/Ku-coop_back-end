@@ -1688,7 +1688,7 @@ app.get('/evaluations/:studentID/:version', (req, res) => {
 
 app.get('/evaluations_type/:studentID/:type', (req, res) => {
   const { studentID, type } = req.params;
-
+  console.log(studentID,type)
   // สร้างคำสั่ง SQL เพื่อดึงข้อมูล evaluation
   const sql = `
     SELECT * FROM evaluations
@@ -1746,6 +1746,18 @@ app.get('/evaluation_scores/:evaluationID', (req, res) => {
 app.get('/selfEvaluation_sections', (req, res) => {
   const sql = 'SELECT * FROM evaluation_sections WHERE section_type = ?';
   db.query(sql,["self_evaluate"], (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/selfEvaluation_sections_ForChart', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections  WHERE section_id IN (12,13,14,15,16,17)';
+  db.query(sql, (err, results) => {
       if (err) {
           console.error(err);
           return res.status(500).json({ error: 'Database query failed' });

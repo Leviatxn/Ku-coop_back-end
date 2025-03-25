@@ -32,8 +32,8 @@ app.use(cors({
 
 // ตั้งค่าการเชื่อมต่อกับฐานข้อมูล
 const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
+  host: '25.14.131.252',
+  user: 'remote_user',
   password: '1234',
   database: 'kucoop_project' 
 });
@@ -148,10 +148,11 @@ app.get('/auth/google/callback',
           }
     
           const user = result[0];
-          const token = jwt.sign({ studentId: user.student_id }, "secret_key", { expiresIn: "1h" });
+          const token = jwt.sign({ student_id: user.student_id , role: user.role }, process.env.JWT_SECRET || "default_secret_key", { expiresIn: "1h" });
             
           // ✅ เก็บ Token ใน Session
           req.session.token = token;
+          req.session.role = user.role;
           req.session.student_id = user.student_id;
 
           // ✅ ปิด Popup แล้วให้ React ดึง Token ผ่าน API `/auth/user`
@@ -224,6 +225,23 @@ app.post('/register', async (req, res) => {
       res.json({ message: 'Registration complete!' });
     });
   }
+
+  else if(req.body.role == 'professor'){
+    console.log(req.body.role)
+    const { email,username, student_id, phone_num, password,role } = req.body;
+    if (!username||!email|| !phone_num || !password) {
+      return res.status(400).json({ message: 'All fields are required.' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const insertQuery = 'INSERT INTO users (username,student_id,phone_num,password,is_profile_complete,role,email) VALUES (?,?,?,?,?,?,?)';
+    db.query(insertQuery, [username, student_id, phone_num, hashedPassword, 1,role, email], (err, result) => {
+      if (err) {
+        console.error('Database Update Error:', err); // แสดง error
+        return res.status(500).json({ message: 'Error registering user.' });
+      }
+      res.json({ message: 'Registration complete!' });
+    });
+  }
 });
 
 
@@ -232,8 +250,8 @@ app.post('/register', async (req, res) => {
 app.post("/login", (req, res) => {
   const { student_id, password } = req.body;
 
-  const query = "SELECT * FROM users WHERE student_id = ?";
-  db.query(query, [student_id], (err, result) => {
+  const query = "SELECT * FROM users WHERE student_id = ? AND role = ? ";
+  db.query(query, [student_id,"student"], (err, result) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (result.length === 0) return res.status(404).json({ error: "User not found" });
 
@@ -242,7 +260,7 @@ app.post("/login", (req, res) => {
           if (err) return res.status(500).json({ error: "Error comparing passwords" });
           if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
 
-          const token = jwt.sign({ studentId: user.student_id }, "secret_key", { expiresIn: "1h" });
+          const token = jwt.sign({ student_id: user.student_id , role: user.role },process.env.JWT_SECRET || "default_secret_key", { expiresIn: "1h" });
           res.json({ message: "Login successful", token, student_id: user.student_id });
       });
   });
@@ -254,8 +272,8 @@ app.post("/admin-login", (req, res) => {
 
   const { email, password } = req.body;
 
-  const query = "SELECT * FROM users WHERE email = ?";
-  db.query(query, [email], (err, result) => {
+  const query = "SELECT * FROM users WHERE email = ? AND role = ? ";
+  db.query(query, [email,"admin"], (err, result) => {
       if (err) return res.status(500).json({ error: "Database error" });
       if (result.length === 0) return res.status(404).json({ error: "User not found" });
 
@@ -265,11 +283,37 @@ app.post("/admin-login", (req, res) => {
           if (err) return res.status(500).json({ error: "Error comparing passwords" });
           if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
 
-          const token = jwt.sign({ email: user.email }, "secret_key", { expiresIn: "1h" });
+          const token = jwt.sign({ email: user.email , role: user.role }, process.env.JWT_SECRET || "default_secret_key",  { expiresIn: "1h" });
           res.json({ message: "Login successful", token, email: user.email });
       });
   });
 });
+
+
+
+//Admin Login
+app.post("/prof-login", (req, res) => {
+  console.log(req.body)
+
+  const { email, password } = req.body;
+
+  const query = "SELECT * FROM users WHERE email = ? AND role = ? ";
+  db.query(query, [email,"professor"], (err, result) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      if (result.length === 0) return res.status(404).json({ error: "User not found" });
+
+      const user = result[0];
+      console.log(user)
+      bcrypt.compare(password, user.password, (err, isMatch) => {
+          if (err) return res.status(500).json({ error: "Error comparing passwords" });
+          if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
+
+          const token = jwt.sign({ email: user.email , role: user.role }, process.env.JWT_SECRET || "default_secret_key", { expiresIn: "1h" });
+          res.json({ message: "Login successful", token, email: user.email });
+      });
+  });
+});
+
 //API ดึงข้อมูล Profile
 app.get("/user/:student_id", (req, res) => {
   const { student_id } = req.params;
@@ -311,8 +355,8 @@ app.get("/user_info/:student_id", (req, res) => {
       phone_number, 
       company_name, 
       current_petition, 
-      lastest_coopapplication, 
-      lastest_studentcoopapplication, 
+      is_firstappointment, 
+      is_secondappointment, 
       current_state,
       coop_state,
       profile_img
@@ -331,7 +375,7 @@ app.get("/user_info/:student_id", (req, res) => {
 // API ดึงข้อมูล Info
 app.get("/coop_info/:student_id", (req, res) => {
   const { student_id } = req.params;
-  console.log(student_id);
+  console.log('coop',student_id);
   const query = `
     SELECT 
       CompanyNameTH,
@@ -408,6 +452,37 @@ app.get("/second_appointment/:student_id", (req, res) => {
       console.log('error user not found');
       return res.status(404).json({ error: "User not found" });
     }
+    res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
+  });
+});
+
+// API ดึงข้อมูล Info
+app.get("/user_info/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  console.log(student_id);
+  const query = `
+    SELECT 
+      first_name, 
+      last_name, 
+      student_id, 
+      major, 
+      year, 
+      email, 
+      phone_number, 
+      company_name, 
+      current_petition, 
+      lastest_coopapplication, 
+      lastest_studentcoopapplication, 
+      current_state,
+      coop_state,
+      profile_img
+    FROM studentsinfo
+    WHERE student_id = ?`;
+
+  db.query(query, [student_id], (err, result) => {
+    if (err) return res.status(500).json({ error: "Database error" });
+    if (result.length === 0) return res.status(404).json({ error: "User not found" });
+
     res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
   });
 });
@@ -505,8 +580,32 @@ app.put("/addstudent_profile/:student_id", profile_upload.single("profile_img"),
   });
 });
 
+app.post("/addstudentsinfo", (req, res) => {
+  console.log(req.body);
+
+  const { student_id, first_name, last_name, major, year, email, phone_number } = req.body;
+
+  const query = `
+      INSERT INTO studentsinfo (student_id, first_name, last_name, major, year, email, phone_number) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.query(
+      query,
+      [student_id, first_name, last_name, major, year, email, phone_number],
+      (err, result) => {
+          if (err) {
+              console.error(err);
+              res.status(500).send("Error inserting data");
+          } else {
+              res.status(201).send("Data inserted successfully");
+          }
+      }
+  );
+});
+
 //Post Info
-app.put("/addstudentsinfo/:student_id", (req, res) => {
+app.put("/updatestudentsinfo/:student_id", (req, res) => {
   const { student_id } = req.params;
   console.log(student_id);
   console.log(req.body);
@@ -558,6 +657,74 @@ app.put("/updateiscoopstudent", (req, res) => {
   );
 });
 
+//API update สถานะ coop และ companyname
+app.put("/updateFirstevaluation/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  const query = `
+    UPDATE studentsinfo 
+    SET first_evaluate_state = ?
+    WHERE student_id = ?
+  `;
+  db.query(
+    query,
+    [ 1 , student_id],
+    (err, result) => {
+      if (err) {
+        console.error(err);
+        res.status(500).send("Error saving data");
+      } else {
+        res.status(200).send("Data saved successfully");
+      }
+    }
+  );
+});
+
+//API update สถานะ coop และ companyname
+app.put("/updateSecondevaluation/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  const query = `
+    UPDATE studentsinfo 
+    SET second_evaluate_state = ?
+    WHERE student_id = ?
+  `;
+  db.query(
+    query,
+    [ 1 , student_id],
+    (err, result) => {
+      if (err) {
+        console.error(err);
+        res.status(500).send("Error saving data");
+      } else {
+        res.status(200).send("Data saved successfully");
+      }
+    }
+  );
+});
+
+
+//API update สถานะ coop และ companyname
+app.put("/updateCoopState/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  const { currentState } = req.body;
+  console.log(currentState)
+  const query = `
+    UPDATE studentsinfo 
+    SET coop_state = ?
+    WHERE student_id = ?
+  `;
+  db.query(
+    query,
+    [ currentState , student_id],
+    (err, result) => {
+      if (err) {
+        console.error(err);
+        res.status(500).send("Error saving data");
+      } else {
+        res.status(200).send("Data saved successfully");
+      }
+    }
+  );
+});
 
 // API สำหรับอัปเดตค่า Is_approve และ Progress_State
 app.put("/updateStudentApplication", (req, res) => {
@@ -637,10 +804,10 @@ app.post("/current_petition", (req, res) => {
   });
 });
 
-app.post("/addAppointment/:student_id", (req, res) => {
-  console.log("📌 API ถูกเรียกใช้");
+app.post("/addAppointment1/:student_id", (req, res) => {
+  console.log("API ถูกเรียกใช้");
   console.log(req.body);
-  console.log("📌 student_id:", req.params);
+  console.log(" student_id:", req.params);
   const { student_id } = req.params;  // รับค่า student_id จาก URL
   const { appointment_date, appointment_time, Notes } = req.body;
   if ( !appointment_date || !appointment_time ) {
@@ -658,6 +825,210 @@ app.post("/addAppointment/:student_id", (req, res) => {
       return res.status(500).json({ error: "เกิดข้อผิดพลาดในการเพิ่มข้อมูล" });
     }
     res.status(200).json({ message: "เพิ่มการนัดหมายสำเร็จ", appointment_id: result.insertId });
+  });
+});
+app.put("/updateAppointment1/:student_id", (req, res) => {
+  console.log(req.body);
+
+  console.log("student_id:", req.params);
+
+  const { student_id } = req.params;  
+  const { appointment_date, appointment_time, Notes } = req.body;
+
+  if (!appointment_date || !appointment_time) {
+    return res.status(400).json({ error: "กรุณากรอกข้อมูลให้ครบถ้วน" });
+  }
+
+  const query = `
+    UPDATE appointments1 
+    SET appointment_date = ?, appointment_time = ?, notes = ?, updated_at = NOW()
+    WHERE student_id = ?;
+  `;
+
+  db.query(query, [appointment_date, appointment_time, Notes, student_id], (err, result) => {
+    if (err) {
+      console.error("Update Error:", err);
+      return res.status(500).json({ error: "เกิดข้อผิดพลาดในการอัปเดตข้อมูล" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลนัดหมายสำหรับ student_id นี้" });
+    }
+
+    res.status(200).json({ message: "อัปเดตการนัดหมายสำเร็จ" });
+  });
+});
+
+app.put("/updateAdvisorInAppointment1/:student_id", (req, res) => {
+  console.log(req.body);
+
+  console.log("student_id:", req.params);
+
+  const { student_id } = req.params;  
+  const { advisor_date, advisor_time, travel_type,appointment_type } = req.body;
+
+
+  const query = `
+    UPDATE appointments1 
+    SET advisor_date = ?, advisor_time = ?, travel_type = ?,appointment_type = ?, updated_at = NOW()
+    WHERE student_id = ?;
+  `;
+
+  db.query(query, [advisor_date, advisor_time, travel_type,appointment_type, student_id], (err, result) => {
+    if (err) {
+      console.error("Update Error:", err);
+      return res.status(500).json({ error: "เกิดข้อผิดพลาดในการอัปเดตข้อมูล" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลนัดหมายสำหรับ student_id นี้" });
+    }
+
+    res.status(200).json({ message: "อัปเดตการนัดหมายสำเร็จ" });
+  });
+});
+
+
+app.put("/acceptAppointment1/:student_id", (req, res) => {
+  console.log(req.body);
+
+  console.log(" accept student_id:", req.params);
+
+  const { student_id } = req.params;  
+  const {is_accept } = req.body;
+
+
+  const query = `
+    UPDATE appointments1 
+    SET is_accept = ?, updated_at = NOW()
+    WHERE student_id = ?;
+  `;
+
+  db.query(query, [is_accept, student_id], (err, result) => {
+    if (err) {
+      console.error("Update Error:", err);
+      return res.status(500).json({ error: "เกิดข้อผิดพลาดในการอัปเดตข้อมูล" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลนัดหมายสำหรับ student_id นี้" });
+    }
+
+    res.status(200).json({ message: "อัปเดตการนัดหมายสำเร็จ" });
+  });
+});
+
+
+
+app.post("/addAppointment2/:student_id", (req, res) => {
+  console.log("API ถูกเรียกใช้");
+  console.log(req.body);
+  console.log(" student_id:", req.params);
+  const { student_id } = req.params;  // รับค่า student_id จาก URL
+  const { appointment_date, appointment_time, Notes } = req.body;
+  if ( !appointment_date || !appointment_time ) {
+    return res.status(400).json({ error: "กรุณากรอกข้อมูลให้ครบถ้วน" });
+  }
+
+  const query = `
+    INSERT INTO appointments2 (student_id, appointment_date, appointment_time, notes, status, created_at)
+    VALUES (?, ?, ?, ?, 'Scheduled', NOW());
+  `;
+
+  db.query(query, [student_id, appointment_date, appointment_time, Notes], (err, result) => {
+    if (err) {
+      console.error("Insert Error:", err);
+      return res.status(500).json({ error: "เกิดข้อผิดพลาดในการเพิ่มข้อมูล" });
+    }
+    res.status(200).json({ message: "เพิ่มการนัดหมายสำเร็จ", appointment_id: result.insertId });
+  });
+});
+app.put("/updateAppointment2/:student_id", (req, res) => {
+  console.log(req.body);
+
+  console.log("student_id:", req.params);
+
+  const { student_id } = req.params;  
+  const { appointment_date, appointment_time, Notes } = req.body;
+
+  if (!appointment_date || !appointment_time) {
+    return res.status(400).json({ error: "กรุณากรอกข้อมูลให้ครบถ้วน" });
+  }
+
+  const query = `
+    UPDATE appointments2 
+    SET appointment_date = ?, appointment_time = ?, notes = ?, updated_at = NOW()
+    WHERE student_id = ?;
+  `;
+
+  db.query(query, [appointment_date, appointment_time, Notes, student_id], (err, result) => {
+    if (err) {
+      console.error("Update Error:", err);
+      return res.status(500).json({ error: "เกิดข้อผิดพลาดในการอัปเดตข้อมูล" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลนัดหมายสำหรับ student_id นี้" });
+    }
+
+    res.status(200).json({ message: "อัปเดตการนัดหมายสำเร็จ" });
+  });
+});
+
+app.put("/updateAdvisorInAppointment2/:student_id", (req, res) => {
+  console.log(req.body);
+
+  console.log("student_id:", req.params);
+
+  const { student_id } = req.params;  
+  const { advisor_date, advisor_time, travel_type,appointment_type } = req.body;
+
+  const query = `
+    UPDATE appointments2
+    SET advisor_date = ?, advisor_time = ?, travel_type = ?,appointment_type = ?, updated_at = NOW()
+    WHERE student_id = ?;
+  `;
+
+  db.query(query, [advisor_date, advisor_time, travel_type,appointment_type, student_id], (err, result) => {
+    if (err) {
+      console.error("Update Error:", err);
+      return res.status(500).json({ error: "เกิดข้อผิดพลาดในการอัปเดตข้อมูล" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลนัดหมายสำหรับ student_id นี้" });
+    }
+
+    res.status(200).json({ message: "อัปเดตการนัดหมายสำเร็จ" });
+  });
+});
+
+app.put("/acceptAppointment2/:student_id", (req, res) => {
+  console.log(req.body);
+
+  console.log(" accept student_id:", req.params);
+
+  const { student_id } = req.params;  
+  const {is_accept } = req.body;
+
+
+  const query = `
+    UPDATE appointments2 
+    SET is_accept = ?, updated_at = NOW()
+    WHERE student_id = ?;
+  `;
+
+  db.query(query, [is_accept, student_id], (err, result) => {
+    if (err) {
+      console.error("Update Error:", err);
+      return res.status(500).json({ error: "เกิดข้อผิดพลาดในการอัปเดตข้อมูล" });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "ไม่พบข้อมูลนัดหมายสำหรับ student_id นี้" });
+    }
+
+    res.status(200).json({ message: "อัปเดตการนัดหมายสำเร็จ" });
   });
 });
 
@@ -1088,6 +1459,47 @@ app.get("/coopapplication/:ApplicationID", (req, res) => {
   });
 });
 
+app.delete("/studentcoopdelete/:ApplicationID", (req, res) => {
+  const { ApplicationID } = req.params;
+
+  const query = `
+    DELETE FROM studentcoopapplication WHERE ApplicationID = ?
+  `;
+
+  db.query(query, [ApplicationID], (err, result) => {
+    if (err) {
+      console.error("Error deleting data:", err);
+      res.status(500).send("Failed to delete data");
+    } else {
+      if (result.affectedRows > 0) {
+        res.json({ message: "Deleted successfully" });
+      } else {
+        res.status(404).send("ApplicationID not found");
+      }
+    }
+  });
+});
+
+app.delete("/coopapplicationdelete/:ApplicationID", (req, res) => {
+  const { ApplicationID } = req.params;
+
+  const query = `
+    DELETE FROM coopapplication WHERE ApplicationID = ?
+  `;
+
+  db.query(query, [ApplicationID], (err, result) => {
+    if (err) {
+      console.error("Error deleting data:", err);
+      res.status(500).send("Failed to delete data");
+    } else {
+      if (result.affectedRows > 0) {
+        res.json({ message: "Deleted successfully" });
+      } else {
+        res.status(404).send("ApplicationID not found");
+      }
+    }
+  });
+});
 
 //coopproj ect
 // ตั้งค่าการอัปโหลดไฟล์สำหรับโปรเจกต์
@@ -1247,6 +1659,230 @@ app.get("/projectdetails/:projectId", (req, res) => {
   });
 });
 
+
+app.get('/evaluations/:studentID/:version', (req, res) => {
+  const { studentID, version } = req.params;
+
+  // สร้างคำสั่ง SQL เพื่อดึงข้อมูล evaluation
+  const sql = `
+    SELECT * FROM evaluations
+    WHERE student_id = ? AND evaluation_version = ?
+  `;
+
+  // ทำการ query ข้อมูล
+  db.query(sql, [studentID, version], (err, results) => {
+    if (err) {
+      console.error('Error fetching evaluation data:', err);
+      return res.status(500).json({ error: 'Failed to fetch evaluation data' });
+    }
+
+    if (results.length > 0) {
+      // ส่งข้อมูล evaluation กลับไป
+      res.status(200).json(results[0]);
+    } else {
+      // หากไม่พบข้อมูล
+      res.status(404).json({ message: 'Evaluation not found' });
+    }
+  });
+});
+
+app.get('/evaluations_type/:studentID/:type', (req, res) => {
+  const { studentID, type } = req.params;
+  console.log(studentID,type)
+  // สร้างคำสั่ง SQL เพื่อดึงข้อมูล evaluation
+  const sql = `
+    SELECT * FROM evaluations
+    WHERE student_id = ? AND evaluation_type = ?
+  `;
+
+  // ทำการ query ข้อมูล
+  db.query(sql, [studentID, type], (err, results) => {
+    if (err) {
+      console.error('Error fetching evaluation data:', err);
+      return res.status(500).json({ error: 'Failed to fetch evaluation data' });
+    }
+
+    if (results.length > 0) {
+      // ส่งข้อมูล evaluation กลับไป
+      res.status(200).json(results[0]);
+    } else {
+      // หากไม่พบข้อมูล
+      res.status(404).json({ message: 'Evaluation not found' });
+    }
+  });
+});
+
+// API สำหรับดึงข้อมูลคะแนนโดยใช้ evaluationID
+app.get('/evaluation_scores/:evaluationID', (req, res) => {
+  const { evaluationID } = req.params;
+  console.log(evaluationID)
+
+  // สร้างคำสั่ง SQL เพื่อดึงข้อมูลคะแนน
+  const sql = `
+    SELECT * FROM evaluation_scores
+    WHERE evaluation_id = ?
+  `;
+
+  // ทำการ query ข้อมูล
+  db.query(sql, [evaluationID], (err, results) => {
+    if (err) {
+      console.error('Error fetching evaluation scores:', err);
+      return res.status(500).json({ error: 'Failed to fetch evaluation scores' });
+    }
+
+    if (results.length > 0) {
+      // ส่งข้อมูลคะแนนกลับไป
+      res.status(200).json(results);
+    } else {
+      // หากไม่พบข้อมูล
+      res.status(404).json({ message: 'No scores found for this evaluation' });
+    }
+  });
+});
+
+
+
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/selfEvaluation_sections', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_type = ?';
+  db.query(sql,["self_evaluate"], (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/selfEvaluation_sections_ForChart', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections  WHERE section_id IN (12,13,14,15,16,17)';
+  db.query(sql, (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/firstsupervision_sections', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_id IN (1,2,3,4,5,6)';
+  db.query(sql, (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/secondsupervision_sections', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_id IN (1,2,3,7,5,6)';
+  db.query(sql, (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/projectevaluation_sections', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_id IN (8,9,10,11)';
+  db.query(sql, (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+// ดึงหัวข้อย่อยของแต่ละหัวข้อหลัก
+app.get('/criteria/:section_id', (req, res) => {
+  const { section_id } = req.params;
+  const sql = 'SELECT * FROM evaluation_criteria WHERE section_id = ?';
+  db.query(sql, [section_id], (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+app.post("/addevaluation", (req, res) => {
+  console.log(req.body)
+  const { student_id, company_id, evaluator_name, evaluate_by, evaluation_version, evaluation_for, evaluation_type } = req.body;
+
+  if (!student_id || !company_id || !evaluator_name || !evaluate_by || !evaluation_version || !evaluation_for || !evaluation_type) {
+      return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  const query = `
+      INSERT INTO evaluations 
+      (student_id, company_id, evaluator_name, created_at, evaluate_by, evaluation_version, evaluation_for, evaluation_type) 
+      VALUES (?, ?, ?, NOW(), ?, ?, ?, ?)
+  `;
+
+  db.query(
+      query,
+      [student_id, company_id, evaluator_name, evaluate_by, evaluation_version, evaluation_for, evaluation_type],
+      (err, result) => {
+          if (err) {
+              console.error(err);
+              return res.status(500).json({ message: "Error inserting data", error: err });
+          }
+          res.status(201).json({ message: "Evaluation added successfully", evaluation_id: result.insertId });
+      }
+  );
+});
+
+
+app.put('/updateEvaluatedState/:evaluation_id', async (req, res) => {
+  const { evaluationID } = req.params;
+  const query = 'UPDATE evaluations SET is_evaluated = ? WHERE evaluation_id = ?';
+  db.query(query, [1,evaluationID], (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
+
+app.post('/evaluation_scores', (req, res) => {
+  const scores = req.body.scores;
+  console.log(scores)
+  if (!scores || !Array.isArray(scores)) {
+    return res.status(400).json({ error: 'Invalid data format' });
+  }
+
+  // สร้างคำสั่ง SQL สำหรับเพิ่มข้อมูล
+  const sql = 'INSERT INTO evaluation_scores (evaluation_id, criteria_id, score, comments) VALUES ?';
+  const values = scores.map((score) => [
+    score.evaluation_id,
+    score.criteria_id,
+    score.score,
+    score.comments || null, // หากไม่มี comments ให้ใช้ null
+  ]);
+
+  // ทำการบันทึกข้อมูล
+  db.query(sql, [values], (err, result) => {
+    if (err) {
+      console.error('Error inserting data:', err);
+      return res.status(500).json({ error: 'Failed to insert data' });
+    }
+
+    console.log('Data inserted successfully:', result);
+    res.status(200).json({ message: 'Data inserted successfully' });
+  });
+});
 
 // Start Server
 app.listen(5000, () => {

@@ -38,6 +38,7 @@ const db = mysql.createConnection({
   database: 'kucoop_project' 
 });
 
+
 db.connect((err) => {
     if (err) {
         console.error("Database connection failed: ", err);
@@ -356,7 +357,9 @@ app.get("/user_info/:student_id", (req, res) => {
       company_name, 
       current_petition, 
       is_firstappointment, 
-      is_secondappointment, 
+      is_secondappointment,
+      first_evaluate_state,
+      second_evaluate_state,
       current_state,
       coop_state,
       profile_img
@@ -1441,6 +1444,34 @@ app.get("/studentcoopapplication/:ApplicationID", (req, res) => {
   });
 });
 
+app.get("/students-per-province", (req, res) => {
+  const query = `
+    SELECT 
+      CompanyProvince AS province,
+      COUNT(StudentID) AS student_count
+    FROM coopapplication
+    WHERE CompanyProvince IS NOT NULL
+    GROUP BY CompanyProvince
+    ORDER BY student_count DESC
+  `;
+
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).json({ error: "Failed to fetch data" });
+    } else {
+      // คำนวณ % ของทั้งหมดที่นี่เลย
+      const total = result.reduce((sum, item) => sum + item.student_count, 0);
+      const dataWithPercentage = result.map(item => ({
+        ...item,
+        percentage: total > 0 ? Math.round((item.student_count / total) * 100) : 0
+      }));
+      res.json(dataWithPercentage);
+    }
+  });
+});
+
+
 //ดึงคำร้องขอตทำงาน sort by application_id
 app.get("/coopapplication/:ApplicationID", (req, res) => {
   const {ApplicationID} = req.params;
@@ -1660,43 +1691,18 @@ app.get("/projectdetails/:projectId", (req, res) => {
 });
 
 
-app.get('/evaluations/:studentID/:version', (req, res) => {
-  const { studentID, version } = req.params;
 
-  // สร้างคำสั่ง SQL เพื่อดึงข้อมูล evaluation
-  const sql = `
-    SELECT * FROM evaluations
-    WHERE student_id = ? AND evaluation_version = ?
-  `;
-
-  // ทำการ query ข้อมูล
-  db.query(sql, [studentID, version], (err, results) => {
-    if (err) {
-      console.error('Error fetching evaluation data:', err);
-      return res.status(500).json({ error: 'Failed to fetch evaluation data' });
-    }
-
-    if (results.length > 0) {
-      // ส่งข้อมูล evaluation กลับไป
-      res.status(200).json(results[0]);
-    } else {
-      // หากไม่พบข้อมูล
-      res.status(404).json({ message: 'Evaluation not found' });
-    }
-  });
-});
-
-app.get('/evaluations_type/:studentID/:type', (req, res) => {
-  const { studentID, type } = req.params;
+app.get('/evaluations/:studentID/:type/:version', (req, res) => {
+  const { studentID, type ,version} = req.params;
   console.log(studentID,type)
   // สร้างคำสั่ง SQL เพื่อดึงข้อมูล evaluation
   const sql = `
     SELECT * FROM evaluations
-    WHERE student_id = ? AND evaluation_type = ?
+    WHERE student_id = ? AND evaluation_type = ? AND evaluation_version = ?
   `;
 
   // ทำการ query ข้อมูล
-  db.query(sql, [studentID, type], (err, results) => {
+  db.query(sql, [studentID, type,version], (err, results) => {
     if (err) {
       console.error('Error fetching evaluation data:', err);
       return res.status(500).json({ error: 'Failed to fetch evaluation data' });
@@ -1740,6 +1746,79 @@ app.get('/evaluation_scores/:evaluationID', (req, res) => {
   });
 });
 
+// API สำหรับดึงข้อมูลคะแนนโดยใช้ evaluationID
+app.get('/evaluation_scores_bytype/:type', (req, res) => {
+  const { type } = req.params;
+  console.log(type)
+
+  // สร้างคำสั่ง SQL เพื่อดึงข้อมูลคะแนน
+  const sql = `
+      SELECT 
+        es.score_id,
+        es.evaluation_id,
+        es.criteria_id,
+        es.score,
+        es.comments,
+        es.evaluation_type,
+        ec.section_id,
+        ec.criteria_text
+      FROM evaluation_scores es
+      JOIN evaluation_criteria ec ON es.criteria_id = ec.criteria_id
+      WHERE es.evaluation_type = ?
+      ORDER BY es.criteria_id ASC
+  `;
+
+  // ทำการ query ข้อมูล
+  db.query(sql, [type], (err, results) => {
+    if (err) {
+      console.error('Error fetching evaluation scores:', err);
+      return res.status(500).json({ error: 'Failed to fetch evaluation scores' });
+    }
+
+    if (results.length > 0) {
+      // ส่งข้อมูลคะแนนกลับไป
+      res.status(200).json(results);
+    } else {
+      // หากไม่พบข้อมูล
+      res.status(404).json({ message: 'No scores found for this evaluation' });
+    }
+  });
+});
+
+
+
+// API เพื่อดึงข้อมูล criteria ทั้งหมด
+app.get('/criteria/all', async (req, res) => {
+  try {
+    // ดึง connection จาก pool
+    const connection = await pool.getConnection();
+    
+    // คำสั่ง SQL เพื่อดึงข้อมูล criteria ทั้งหมด
+    const [rows] = await connection.query(`
+      SELECT 
+        criteria_id,
+        section_id,
+        criteria_text,
+        created_at,
+        updated_at
+      FROM evaluation_criteria
+      ORDER BY section_id, criteria_id
+    `);
+    
+    // คืน connection
+    connection.release();
+    
+    // ส่งข้อมูลกลับเป็น JSON
+    res.status(200).json(rows);
+    
+  } catch (error) {
+    console.error('Error fetching criteria:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch criteria',
+      details: error.message 
+    });
+  }
+});
 
 
 // ดึงหัวข้อหลักทั้งหมด
@@ -1754,15 +1833,31 @@ app.get('/selfEvaluation_sections', (req, res) => {
   });
 });
 
-// ดึงหัวข้อหลักทั้งหมด
+// ดึงหัวข้อหลักทั้งหมดและแปลงชื่อเป็นภาษาอังกฤษ
 app.get('/selfEvaluation_sections_ForChart', (req, res) => {
-  const sql = 'SELECT * FROM evaluation_sections  WHERE section_id IN (12,13,14,15,16,17)';
+  const sql = `
+    SELECT 
+      section_id,
+      CASE 
+        WHEN section_name = 'ความประพฤติของนิสิต' THEN 'Behavior'
+        WHEN section_name = 'การพัฒนาตนเอง' THEN 'Self Development'
+        WHEN section_name = 'การแสดงความมีส่วนร่วมกับองค์กร' THEN 'Participation'
+        WHEN section_name = 'ความรู้และความสามารถพี้นฐาน' THEN 'Knowledge'
+        WHEN section_name = 'ความพึงพอใจของนิสิต' THEN 'Satisfaction'
+        WHEN section_name = 'การจัดทำรายงาน' THEN 'Work Report'
+        WHEN section_name = 'สรุปโดยรวมของนิสิต' THEN 'Overall'
+        ELSE section_name
+      END AS section_name,
+      section_type
+    FROM evaluation_sections 
+    WHERE section_id IN (12,13,14,15,16,17,18)
+  `;
   db.query(sql, (err, results) => {
-      if (err) {
-          console.error(err);
-          return res.status(500).json({ error: 'Database query failed' });
-      }
-      res.json(results);
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Database query failed' });
+    }
+    res.json(results);
   });
 });
 
@@ -1818,7 +1913,6 @@ app.get('/criteria/:section_id', (req, res) => {
 app.post("/addevaluation", (req, res) => {
   console.log(req.body)
   const { student_id, company_id, evaluator_name, evaluate_by, evaluation_version, evaluation_for, evaluation_type } = req.body;
-
   if (!student_id || !company_id || !evaluator_name || !evaluate_by || !evaluation_version || !evaluation_for || !evaluation_type) {
       return res.status(400).json({ message: "Missing required fields" });
   }
@@ -1864,11 +1958,12 @@ app.post('/evaluation_scores', (req, res) => {
   }
 
   // สร้างคำสั่ง SQL สำหรับเพิ่มข้อมูล
-  const sql = 'INSERT INTO evaluation_scores (evaluation_id, criteria_id, score, comments) VALUES ?';
+  const sql = 'INSERT INTO evaluation_scores (evaluation_id, criteria_id, score, evaluation_type, comments) VALUES ?';
   const values = scores.map((score) => [
     score.evaluation_id,
     score.criteria_id,
     score.score,
+    score.evaluation_type,
     score.comments || null, // หากไม่มี comments ให้ใช้ null
   ]);
 

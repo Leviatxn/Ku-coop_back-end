@@ -1897,6 +1897,19 @@ app.get('/projectevaluation_sections', (req, res) => {
   });
 });
 
+
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/reportevaluation_sections', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_id IN (19)';
+  db.query(sql, (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
 // ดึงหัวข้อย่อยของแต่ละหัวข้อหลัก
 app.get('/criteria/:section_id', (req, res) => {
   const { section_id } = req.params;
@@ -1958,10 +1971,11 @@ app.post('/evaluation_scores', (req, res) => {
   }
 
   // สร้างคำสั่ง SQL สำหรับเพิ่มข้อมูล
-  const sql = 'INSERT INTO evaluation_scores (evaluation_id, criteria_id, score, evaluation_type, comments) VALUES ?';
+  const sql = 'INSERT INTO evaluation_scores (evaluation_id, criteria_id,section_id, score, evaluation_type, comments) VALUES ?';
   const values = scores.map((score) => [
     score.evaluation_id,
     score.criteria_id,
+    score.section_id,
     score.score,
     score.evaluation_type,
     score.comments || null, // หากไม่มี comments ให้ใช้ null

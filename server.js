@@ -2097,7 +2097,125 @@ app.post("/addcoopreport", (req, res) => {
   );
 });
 
+app.post("/addjob_language/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  const { job_description, tool_used} = req.body;
+  console.log(req.body,student_id)
+  const query = `
+      INSERT INTO student_work_assignments 
+      (student_id,job_description, tool_used, created_at) 
+      VALUES (?, ?, ?, NOW())
+  `;
+  db.query(
+      query,
+      [student_id, job_description, tool_used],
+      (err, result) => {
+          if (err) {
+              console.error(err);
+              return res.status(500).json({ message: "Error inserting data", error: err });
+          }
+          res.status(201).json({ message: "Job&Work added successfully", evaluation_id: result.insertId });
+      }
+  );
+});
 
+app.get("/getjob_language/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  
+  const query = `
+    SELECT * FROM student_work_assignments WHERE student_id = ?`;
+
+  db.query(query, [student_id], (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ 
+        success: false,
+        message: "Error fetching data", 
+        error: err 
+      });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No work assignments found for this student"
+      });
+    }
+
+    // แปลง tools_used จาก string เป็น array
+    const formattedResults = results.map(item => ({
+      ...item,
+      tools_used: item.tools_used ? item.tools_used.split(', ') : []
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: formattedResults
+    });
+  });
+});
+
+
+app.get("/job-distribution", (req, res) => {
+  const query = `
+    SELECT 
+      job_description,
+      COUNT(student_id) AS job_count
+    FROM student_work_assignments
+    WHERE job_description IS NOT NULL
+    GROUP BY job_description
+    ORDER BY job_count DESC
+  `;
+
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error("Error fetching job distribution data:", err);
+      res.status(500).json({ error: "Failed to fetch job distribution data" });
+    } else {
+      // คำนวณ % ของทั้งหมดที่นี่เลย
+      const total = result.reduce((sum, item) => sum + item.job_count, 0);
+      const dataWithPercentage = result.map(item => ({
+        job_description: item.job_description,
+        count: item.job_count,
+        percentage: total > 0 ? Math.round((item.job_count / total) * 100) : 0
+      }));
+      
+      res.json(dataWithPercentage);
+    }
+  });
+});
+ 
+
+app.get("/tools-distribution", (req, res) => {
+  const query = `
+    SELECT 
+      tool_used,
+      COUNT(*) as count,
+      ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM student_work_assignments WHERE tool_used IS NOT NULL), 1) as percentage
+    FROM student_work_assignments
+    WHERE tool_used IS NOT NULL
+    GROUP BY tool_used
+    ORDER BY count DESC
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    
+    // กรองและจัดรูปแบบข้อมูล
+    const formattedData = results
+      .filter(item => item.tool_used.trim() !== '') // กรองค่าว่าง
+      .map(item => ({
+        tool: item.tool_used,
+        count: item.count,
+        percentage: item.percentage
+      }));
+    
+    res.json(formattedData);
+  });
+});
 
 app.put('/updateEvaluatedState/:evaluation_id', async (req, res) => {
   const { evaluationID } = req.params;

@@ -790,7 +790,7 @@ app.put("/updateCoopState/:student_id", (req, res) => {
 
 // API สำหรับอัปเดตค่า Is_approve และ Progress_State
 app.put("/updateStudentApplication", (req, res) => {
-  const { ApplicationID, Is_approve, Progress_State } = req.body;
+  const { ApplicationID, Is_approve, Progress_State,Is_reject } = req.body;
 
   // ตรวจสอบข้อมูลที่รับเข้ามา
   if (!ApplicationID || Is_approve === undefined || Progress_State === undefined) {
@@ -800,12 +800,12 @@ app.put("/updateStudentApplication", (req, res) => {
   // คำสั่ง SQL สำหรับอัปเดตข้อมูล
   const sql = `
     UPDATE studentcoopapplication 
-    SET Is_approve = ?, Progress_State = ? 
+    SET Is_approve = ?, Progress_State = ?  ,Is_reject = ?
     WHERE ApplicationID = ?
   `;
 
   // ดำเนินการอัปเดตข้อมูลในฐานข้อมูล
-  db.query(sql, [Is_approve, Progress_State, ApplicationID], (err, result) => {
+  db.query(sql, [Is_approve, Progress_State,Is_reject, ApplicationID], (err, result) => {
     if (err) {
       console.error("Error updating data:", err);
       res.status(500).json({ error: "Failed to update data." });
@@ -817,7 +817,7 @@ app.put("/updateStudentApplication", (req, res) => {
 
 // API สำหรับอัปเดตค่า Is_approve และ Progress_State
 app.put("/updateCoopApplication", (req, res) => {
-  const { ApplicationID, Is_approve, Progress_State } = req.body;
+  const { ApplicationID, Is_approve, Progress_State,Is_reject } = req.body;
 
   // ตรวจสอบข้อมูลที่รับเข้ามา
   if (!ApplicationID || Is_approve === undefined || Progress_State === undefined) {
@@ -827,12 +827,12 @@ app.put("/updateCoopApplication", (req, res) => {
   // คำสั่ง SQL สำหรับอัปเดตข้อมูล
   const sql = `
     UPDATE coopapplication 
-    SET Is_approve = ?, Progress_State = ? 
+    SET Is_approve = ?, Progress_State = ? , Is_reject = ?
     WHERE ApplicationID = ?
   `;
 
   // ดำเนินการอัปเดตข้อมูลในฐานข้อมูล
-  db.query(sql, [Is_approve, Progress_State, ApplicationID], (err, result) => {
+  db.query(sql, [Is_approve, Progress_State,Is_reject, ApplicationID], (err, result) => {
     if (err) {
       console.error("Error updating data:", err);
       res.status(500).json({ error: "Failed to update data." });
@@ -1342,7 +1342,9 @@ app.get("/petitions/:student_id", (req, res) => {
       Petition_name,
       Petition_version,
       Progress_State,
-      SubmissionDate
+      SubmissionDate,
+      Is_approve,
+      Is_reject
   FROM 
       studentcoopapplication
   WHERE StudentID = ?
@@ -1358,7 +1360,9 @@ app.get("/petitions/:student_id", (req, res) => {
       Petition_name,
       Petition_version,
       Progress_State,
-      SubmissionDate
+      SubmissionDate,
+      Is_approve,
+      Is_reject
   FROM 
       coopapplication 
   WHERE StudentID = ?
@@ -1392,6 +1396,8 @@ app.get("/lastpetition/:student_id", (req, res) => {
         Petition_version,
         Progress_State,
         SubmissionDate,
+        Is_approve,
+        Is_reject,
         Is_inprogress
     FROM (
         SELECT 
@@ -1404,7 +1410,10 @@ app.get("/lastpetition/:student_id", (req, res) => {
             Petition_version,
             Progress_State,
             SubmissionDate,
+            Is_approve,
+            Is_reject,
             Is_inprogress
+
         FROM studentcoopapplication
         WHERE StudentID = ?
 
@@ -1420,6 +1429,8 @@ app.get("/lastpetition/:student_id", (req, res) => {
             Petition_version,
             Progress_State,
             SubmissionDate,
+            Is_approve,
+            Is_reject,
             Is_inprogress
         FROM coopapplication
         WHERE StudentID = ?
@@ -1750,6 +1761,60 @@ app.get("/projectdetails/:projectId", (req, res) => {
 });
 
 
+
+app.get('/coop_report/:evaluation_id', (req, res) => {
+  const { evaluation_id} = req.params;
+  console.log(evaluation_id)
+  // สร้างคำสั่ง SQL เพื่อดึงข้อมูล evaluation
+  const sql = `
+    SELECT * FROM coop_report
+    WHERE evaluation_id = ?
+  `;
+
+  // ทำการ query ข้อมูล
+  db.query(sql, [evaluation_id], (err, results) => {
+    if (err) {
+      console.error('Error fetching evaluation data:', err);
+      return res.status(500).json({ error: 'Failed to fetch evaluation data' });
+    }
+
+    if (results.length > 0) {
+      // ส่งข้อมูล evaluation กลับไป
+      res.status(200).json(results[0]);
+    } else {
+      // หากไม่พบข้อมูล
+      res.status(404).json({ message: 'Evaluation not found' });
+    }
+  });
+});
+
+
+
+app.get('/evaluation_by_id/:evaluation_id', (req, res) => {
+  const { evaluation_id} = req.params;
+  console.log(evaluation_id)
+  // สร้างคำสั่ง SQL เพื่อดึงข้อมูล evaluation
+  const sql = `
+    SELECT * FROM evaluations
+    WHERE evaluation_id = ?
+  `;
+
+  // ทำการ query ข้อมูล
+  db.query(sql, [evaluation_id], (err, results) => {
+    if (err) {
+      console.error('Error fetching evaluation data:', err);
+      return res.status(500).json({ error: 'Failed to fetch evaluation data' });
+    }
+
+    if (results.length > 0) {
+      // ส่งข้อมูล evaluation กลับไป
+      res.status(200).json(results[0]);
+    } else {
+      // หากไม่พบข้อมูล
+      res.status(404).json({ message: 'Evaluation not found' });
+    }
+  });
+});
 
 app.get('/evaluations/:studentID/:type/:version', (req, res) => {
   const { studentID, type ,version} = req.params;

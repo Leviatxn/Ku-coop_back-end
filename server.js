@@ -243,6 +243,23 @@ app.post('/register', async (req, res) => {
       res.json({ message: 'Registration complete!' });
     });
   }
+
+  else if(req.body.role == 'company'){
+    console.log(req.body.role)
+    const { email,username, student_id, phone_num, password,role } = req.body;
+    if (!username||!email|| !phone_num || !password) {
+      return res.status(400).json({ message: 'All fields are required.' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const insertQuery = 'INSERT INTO users (username,student_id,phone_num,password,is_profile_complete,role,email) VALUES (?,?,?,?,?,?,?)';
+    db.query(insertQuery, [username, student_id, phone_num, hashedPassword, 1,role, email], (err, result) => {
+      if (err) {
+        console.error('Database Update Error:', err); // แสดง error
+        return res.status(500).json({ message: 'Error registering user.' });
+      }
+      res.json({ message: 'Registration complete!' });
+    });
+  }
 });
 
 
@@ -292,6 +309,8 @@ app.post("/admin-login", (req, res) => {
 
 
 
+
+
 //Admin Login
 app.post("/prof-login", (req, res) => {
   console.log(req.body)
@@ -315,6 +334,31 @@ app.post("/prof-login", (req, res) => {
   });
 });
 
+
+//Admin Login
+app.post("/company-login", (req, res) => {
+  console.log(req.body)
+
+  const { email, password } = req.body;
+
+  const query = "SELECT * FROM users WHERE email = ? AND role = ? ";
+  db.query(query, [email,"company"], (err, result) => {
+      if (err) return res.status(500).json({ error: "Database error" });
+      if (result.length === 0) return res.status(404).json({ error: "User not found" });
+
+      const user = result[0];
+      console.log(user)
+      bcrypt.compare(password, user.password, (err, isMatch) => {
+          if (err) return res.status(500).json({ error: "Error comparing passwords" });
+          if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
+
+          const token = jwt.sign({ email: user.email , role: user.role }, process.env.JWT_SECRET || "default_secret_key",  { expiresIn: "1h" });
+          res.json({ message: "Login successful", token, email: user.email });
+      });
+  });
+});
+
+
 //API ดึงข้อมูล Profile
 app.get("/user/:student_id", (req, res) => {
   const { student_id } = req.params;
@@ -327,6 +371,21 @@ app.get("/user/:student_id", (req, res) => {
       res.json(result[0]); // ส่งข้อมูลผู้ใช้กลับ
   });
 });
+
+//API ดึงข้อมูล user Sort by role
+app.get("/user_by_role/:role", (req, res) => {
+  const { role } = req.params;
+  const query = "SELECT * FROM users WHERE role = ? ORDER BY username ";
+  db.query(query,[role], (err, results) => {
+    if (err) {
+      console.error("Error fetching data:", err);
+      res.status(500).send("Failed to fetch data");
+    } else {
+      res.status(200).json(results);
+    }
+  });
+});
+
 
 //API ดึงข้อมูล Profile Select by Email
 app.get("/user-email/:email", (req, res) => {
@@ -1718,6 +1777,69 @@ app.get('/evaluations/:studentID/:type/:version', (req, res) => {
   });
 });
 
+
+app.get('/checkEvaluation/:studentID/:type/:version', async (req, res) => {
+  const { studentID, type, version } = req.params;
+  
+  if (!studentID || !type || !version) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Missing required parameters: studentID, type, or version' 
+    });
+  }
+
+  const validTypes = ['supervision', 'coop_project', 'self_evaluate', 'coop_report'];
+  const validVersions = ['first', 'second', 'last'];
+  
+  if (!validTypes.includes(type)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid evaluation type',
+      validTypes: validTypes
+    });
+  }
+
+  if (!validVersions.includes(version)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid evaluation version',
+      validVersions: validVersions
+    });
+  }
+
+  try {
+    const sql = `
+      SELECT * FROM evaluations
+      WHERE student_id = ? AND evaluation_type = ? AND evaluation_version = ?
+      LIMIT 1
+    `;
+
+    const [results] = await db.promise().query(sql, [studentID, type, version]);
+
+    if (results.length > 0) {
+      res.status(200).json({
+        success: true,
+        exists: true,
+        data: results[0]
+      });
+    } else {
+      res.status(200).json({ 
+        success: true,
+        exists: false,
+        message: 'No evaluation found with the specified criteria'
+      });
+    }
+
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Database operation failed',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
 // API สำหรับดึงข้อมูลคะแนนโดยใช้ evaluationID
 app.get('/evaluation_scores/:evaluationID', (req, res) => {
   const { evaluationID } = req.params;
@@ -1897,6 +2019,19 @@ app.get('/projectevaluation_sections', (req, res) => {
   });
 });
 
+
+// ดึงหัวข้อหลักทั้งหมด
+app.get('/reportevaluation_sections', (req, res) => {
+  const sql = 'SELECT * FROM evaluation_sections WHERE section_id IN (19)';
+  db.query(sql, (err, results) => {
+      if (err) {
+          console.error(err);
+          return res.status(500).json({ error: 'Database query failed' });
+      }
+      res.json(results);
+  });
+});
+
 // ดึงหัวข้อย่อยของแต่ละหัวข้อหลัก
 app.get('/criteria/:section_id', (req, res) => {
   const { section_id } = req.params;
@@ -1936,6 +2071,151 @@ app.post("/addevaluation", (req, res) => {
   );
 });
 
+app.post("/addcoopreport", (req, res) => {
+  console.log(req.body)
+  const { evaluation_id, student_id, report_title_th, report_title_eng, additional_comments} = req.body;
+  if (!evaluation_id || !student_id || !report_title_th || !report_title_eng || !additional_comments) {
+      return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  const query = `
+      INSERT INTO coop_report 
+      (evaluation_id, student_id, report_title_th,report_title_eng,additional_comments, created_at) 
+      VALUES (?, ?, ?, ?, ?, NOW())
+  `;
+
+  db.query(
+      query,
+      [evaluation_id, student_id, report_title_th, report_title_eng, additional_comments],
+      (err, result) => {
+          if (err) {
+              console.error(err);
+              return res.status(500).json({ message: "Error inserting data", error: err });
+          }
+          res.status(201).json({ message: "Evaluation added successfully", evaluation_id: result.insertId });
+      }
+  );
+});
+
+app.post("/addjob_language/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  const { job_description, tool_used} = req.body;
+  console.log(req.body,student_id)
+  const query = `
+      INSERT INTO student_work_assignments 
+      (student_id,job_description, tool_used, created_at) 
+      VALUES (?, ?, ?, NOW())
+  `;
+  db.query(
+      query,
+      [student_id, job_description, tool_used],
+      (err, result) => {
+          if (err) {
+              console.error(err);
+              return res.status(500).json({ message: "Error inserting data", error: err });
+          }
+          res.status(201).json({ message: "Job&Work added successfully", evaluation_id: result.insertId });
+      }
+  );
+});
+
+app.get("/getjob_language/:student_id", (req, res) => {
+  const { student_id } = req.params;
+  
+  const query = `
+    SELECT * FROM student_work_assignments WHERE student_id = ?`;
+
+  db.query(query, [student_id], (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ 
+        success: false,
+        message: "Error fetching data", 
+        error: err 
+      });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No work assignments found for this student"
+      });
+    }
+
+    // แปลง tools_used จาก string เป็น array
+    const formattedResults = results.map(item => ({
+      ...item,
+      tools_used: item.tools_used ? item.tools_used.split(', ') : []
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: formattedResults
+    });
+  });
+});
+
+
+app.get("/job-distribution", (req, res) => {
+  const query = `
+    SELECT 
+      job_description,
+      COUNT(student_id) AS job_count
+    FROM student_work_assignments
+    WHERE job_description IS NOT NULL
+    GROUP BY job_description
+    ORDER BY job_count DESC
+  `;
+
+  db.query(query, (err, result) => {
+    if (err) {
+      console.error("Error fetching job distribution data:", err);
+      res.status(500).json({ error: "Failed to fetch job distribution data" });
+    } else {
+      // คำนวณ % ของทั้งหมดที่นี่เลย
+      const total = result.reduce((sum, item) => sum + item.job_count, 0);
+      const dataWithPercentage = result.map(item => ({
+        job_description: item.job_description,
+        count: item.job_count,
+        percentage: total > 0 ? Math.round((item.job_count / total) * 100) : 0
+      }));
+      
+      res.json(dataWithPercentage);
+    }
+  });
+});
+ 
+
+app.get("/tools-distribution", (req, res) => {
+  const query = `
+    SELECT 
+      tool_used,
+      COUNT(*) as count,
+      ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM student_work_assignments WHERE tool_used IS NOT NULL), 1) as percentage
+    FROM student_work_assignments
+    WHERE tool_used IS NOT NULL
+    GROUP BY tool_used
+    ORDER BY count DESC
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    
+    // กรองและจัดรูปแบบข้อมูล
+    const formattedData = results
+      .filter(item => item.tool_used.trim() !== '') // กรองค่าว่าง
+      .map(item => ({
+        tool: item.tool_used,
+        count: item.count,
+        percentage: item.percentage
+      }));
+    
+    res.json(formattedData);
+  });
+});
 
 app.put('/updateEvaluatedState/:evaluation_id', async (req, res) => {
   const { evaluationID } = req.params;
@@ -1958,10 +2238,11 @@ app.post('/evaluation_scores', (req, res) => {
   }
 
   // สร้างคำสั่ง SQL สำหรับเพิ่มข้อมูล
-  const sql = 'INSERT INTO evaluation_scores (evaluation_id, criteria_id, score, evaluation_type, comments) VALUES ?';
+  const sql = 'INSERT INTO evaluation_scores (evaluation_id, criteria_id,section_id, score, evaluation_type, comments) VALUES ?';
   const values = scores.map((score) => [
     score.evaluation_id,
     score.criteria_id,
+    score.section_id,
     score.score,
     score.evaluation_type,
     score.comments || null, // หากไม่มี comments ให้ใช้ null
@@ -1977,6 +2258,24 @@ app.post('/evaluation_scores', (req, res) => {
     console.log('Data inserted successfully:', result);
     res.status(200).json({ message: 'Data inserted successfully' });
   });
+});
+
+// ใน backend (ตัวอย่างใช้ Express.js)
+app.get('/checkEvaluation/', async (req, res) => {
+  const { student_id, evaluation_type } = req.query;
+  
+  try {
+    const evaluation = await Evaluation.findOne({ 
+      where: { 
+        student_id, 
+        evaluation_type 
+      } 
+    });
+    
+    res.json({ exists: !!evaluation });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Start Server

@@ -34,6 +34,8 @@ app.use(cors({
 const db = mysql.createConnection({
   host: '25.14.131.252',
   user: 'remote_user',
+  host: 'localhost',
+  user: 'root',
   password: '1234',
   database: 'kucoop_project' 
 });

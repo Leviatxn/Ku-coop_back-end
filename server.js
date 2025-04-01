@@ -32,8 +32,8 @@ app.use(cors({
 
 // ตั้งค่าการเชื่อมต่อกับฐานข้อมูล
 const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
+  host: '25.14.131.252',
+  user: 'remote_user',
   password: '1234',
   database: 'kucoop_project' 
 });
@@ -400,7 +400,6 @@ app.get("/user-email/:email", (req, res) => {
   });
 });
 
-// API ดึงข้อมูล Info
 app.get("/user_info/:student_id", (req, res) => {
   const { student_id } = req.params;
   console.log(student_id);
@@ -790,7 +789,7 @@ app.put("/updateCoopState/:student_id", (req, res) => {
 
 // API สำหรับอัปเดตค่า Is_approve และ Progress_State
 app.put("/updateStudentApplication", (req, res) => {
-  const { ApplicationID, Is_approve, Progress_State,Is_reject } = req.body;
+  const { ApplicationID, Is_approve, Progress_State,Is_reject,Is_inprogress } = req.body;
 
   // ตรวจสอบข้อมูลที่รับเข้ามา
   if (!ApplicationID || Is_approve === undefined || Progress_State === undefined) {
@@ -800,12 +799,12 @@ app.put("/updateStudentApplication", (req, res) => {
   // คำสั่ง SQL สำหรับอัปเดตข้อมูล
   const sql = `
     UPDATE studentcoopapplication 
-    SET Is_approve = ?, Progress_State = ?  ,Is_reject = ?
+    SET Is_approve = ?, Progress_State = ?  ,Is_reject = ?,Is_inprogress = ?
     WHERE ApplicationID = ?
   `;
 
   // ดำเนินการอัปเดตข้อมูลในฐานข้อมูล
-  db.query(sql, [Is_approve, Progress_State,Is_reject, ApplicationID], (err, result) => {
+  db.query(sql, [Is_approve, Progress_State,Is_reject,Is_inprogress, ApplicationID], (err, result) => {
     if (err) {
       console.error("Error updating data:", err);
       res.status(500).json({ error: "Failed to update data." });
@@ -817,7 +816,7 @@ app.put("/updateStudentApplication", (req, res) => {
 
 // API สำหรับอัปเดตค่า Is_approve และ Progress_State
 app.put("/updateCoopApplication", (req, res) => {
-  const { ApplicationID, Is_approve, Progress_State,Is_reject } = req.body;
+  const { ApplicationID, Is_approve, Progress_State,Is_reject,Is_inprogress } = req.body;
 
   // ตรวจสอบข้อมูลที่รับเข้ามา
   if (!ApplicationID || Is_approve === undefined || Progress_State === undefined) {
@@ -827,12 +826,12 @@ app.put("/updateCoopApplication", (req, res) => {
   // คำสั่ง SQL สำหรับอัปเดตข้อมูล
   const sql = `
     UPDATE coopapplication 
-    SET Is_approve = ?, Progress_State = ? , Is_reject = ?
+    SET Is_approve = ?, Progress_State = ? , Is_reject = ? , Is_inprogress = ?
     WHERE ApplicationID = ?
   `;
 
   // ดำเนินการอัปเดตข้อมูลในฐานข้อมูล
-  db.query(sql, [Is_approve, Progress_State,Is_reject, ApplicationID], (err, result) => {
+  db.query(sql, [Is_approve, Progress_State,Is_reject,Is_inprogress, ApplicationID], (err, result) => {
     if (err) {
       console.error("Error updating data:", err);
       res.status(500).json({ error: "Failed to update data." });
@@ -1662,7 +1661,6 @@ app.get("/coopproject/:student_id", (req, res) => {
   });
 });
 
-// Express.js API endpoint สำหรับอัพเดทสถานะโปรเจค
 app.put('/updateProjectStatus/:ProjectID', async (req, res) => {
   const { ProjectID } = req.params;
   const { project_state } = req.body;
@@ -1689,7 +1687,31 @@ app.put('/updateProjectStatus/:ProjectID', async (req, res) => {
   }
 });
 
+app.put('/updateProjectDetail/:ProjectID', async (req, res) => {
+  const { ProjectID } = req.params;
+  const { Advisor,Committee1,Committee2 } = req.body;
 
+  // ตรวจสอบว่า project_state มีค่าหรือไม่
+  if (Advisor === undefined || Committee1 === null || Committee2 === null) {
+    return res.status(400).json({ message: 'Missing project state' });
+  }
+
+  try {
+    // การใช้ SQL Query เพื่ออัปเดตสถานะ
+    const query = 'UPDATE coopproject SET Advisor = ?,Committee1 = ? ,Committee2 = ?  WHERE ProjectID = ?';
+    const [result] = await db.promise().query(query, [Advisor,Committee1,Committee2, ProjectID]);
+
+    // ตรวจสอบว่ามีการอัปเดตหรือไม่
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    res.json({ message: 'Project status updated successfully' });
+  } catch (err) {
+    console.error('Error updating project status:', err);
+    return res.status(500).json({ message: 'Error updating project status' });
+  }
+});
 
 app.get("/allprojects", (req, res) => {
   const sql = `

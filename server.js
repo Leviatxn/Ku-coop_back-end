@@ -723,7 +723,7 @@ app.put("/updateFirstevaluation/:student_id", (req, res) => {
   const { student_id } = req.params;
   const query = `
     UPDATE studentsinfo 
-    SET first_evaluate_state = ?
+    SET is_firstappointment = ?
     WHERE student_id = ?
   `;
   db.query(
@@ -745,7 +745,7 @@ app.put("/updateSecondevaluation/:student_id", (req, res) => {
   const { student_id } = req.params;
   const query = `
     UPDATE studentsinfo 
-    SET second_evaluate_state = ?
+    SET is_secondappointment = ?
     WHERE student_id = ?
   `;
   db.query(
@@ -1687,7 +1687,7 @@ app.put('/updateProjectStatus/:ProjectID', async (req, res) => {
   }
 });
 
-app.put('/updateProjectDetail/:ProjectID', async (req, res) => {
+app.put('/updateProjectAdvisor/:ProjectID', async (req, res) => {
   const { ProjectID } = req.params;
   const { Advisor,Committee1,Committee2 } = req.body;
 
